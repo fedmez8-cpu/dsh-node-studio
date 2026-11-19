@@ -19,10 +19,6 @@ Build multi-step AI pipelines with multiple inputs, project file readers, chaine
 1. Clone or download this repository into a local folder (e.g. `~/plugins/dsh-node-studio`).
 2. Add the plugin to your DSH profile (`~/.dsh/profiles/desktop/package.json`):
 
-3. 
-
-Full documentation and installation steps are available in the repository.
-
 
 ```json
 {
