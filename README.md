@@ -21,14 +21,6 @@ Build multi-step AI pipelines with multiple inputs, project file readers, chaine
 
 3. 
 
-## Usage & Controls
-
-- **Connect Nodes**: Click the blue output port on a source node and then the green input port on the target node.
-- **Disconnect / Delete a Wire**: Left-click on the blue connection line.
-- **Rename a Node**: Double-click the node title in its header.
-- **Move & Resize Nodes**: Drag a node by its header or use the handle at the bottom-right corner.
-- **Canvas Navigation**: Hold the middle mouse button to pan and use the mouse wheel to zoom.
-
 Full documentation and installation steps are available in the repository.
 
 
@@ -60,6 +52,14 @@ If your provider key is stored in the OS keychain and not exposed to environment
   "openrouter": "sk-or-..."
 }
 ```
+
+## Usage & Controls
+
+- **Connect Nodes**: Click the blue output port on a source node and then the green input port on the target node.
+- **Disconnect / Delete a Wire**: Left-click on the blue connection line.
+- **Rename a Node**: Double-click the node title in its header.
+- **Move & Resize Nodes**: Drag a node by its header or use the handle at the bottom-right corner.
+- **Canvas Navigation**: Hold the middle mouse button to pan and use the mouse wheel to zoom.
 
 ## License
 
