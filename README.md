@@ -33,11 +33,15 @@ The plugin reads keys and `baseURL` from your DSH profile. For keys stored outsi
 }
 ```
 
-## Basic Controls
+## Usage & Controls
 
-- **Selection & Editing**: Left-click to select, `Shift/Ctrl + Click` for multi-select, double-click headers to rename, `Ctrl+C`/`Ctrl+V` to duplicate, and `Delete`/`Backspace` to remove.
-- **Connections**: Click a source node's blue output port and connect it to a target node's green input port; click wires to delete.
-- **Canvas Navigation**: Middle-mouse drag (or `Space + Left Drag`) to pan, mouse wheel to zoom, and `Ctrl+Z` / `Ctrl+Shift+Z` for undo/redo.
+- **Select Nodes**: Left-click a node to select it, `Shift/Ctrl + Click` to toggle multiple nodes, or drag a selection box with the left mouse button on empty canvas space (`Ctrl+A` to select all).
+- **Connect & Disconnect Nodes**: Click the blue output port on a source node and then the green input port on the target node. Left-click on any blue wire to delete it.
+- **Move & Resize Nodes**: Drag any node (or a group of selected nodes) by its header, or use the handle at the bottom-right corner to resize.
+- **Rename a Node**: Double-click the node title in its header.
+- **Duplicate & Delete**: Press `Ctrl+C` / `Ctrl+V` to copy and paste selected nodes along with their internal connections, or `Delete` / `Backspace` to remove them.
+- **Undo / Redo**: Press `Ctrl+Z` to undo and `Ctrl+Shift+Z` (or `Ctrl+Y`) to redo canvas changes.
+- **Canvas Navigation**: Hold the middle mouse button (or `Space + Left Drag`) to pan and use the mouse wheel to zoom.
 
 ## License
 
