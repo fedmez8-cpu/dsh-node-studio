@@ -2,6 +2,9 @@
 
 A visual node-based workflow editor plugin for **DeepSeek Harness (DSH)** to build multi-step AI pipelines, chain LLM agents, and export results.
 
+<img width="1362" height="817" alt="image" src="https://github.com/user-attachments/assets/6ae3d541-89b1-47d0-9b3d-91d66f3b8089" />
+
+
 ## Key Features
 
 - **Multi-Input & Sequential Agent Chains**: Connect input nodes, project files, and upstream LLM agents; downstream agents wait for upstream completion.
