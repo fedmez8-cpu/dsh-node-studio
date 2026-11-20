@@ -207,11 +207,12 @@ window.__ModuleLoader__.load({
       const [projectFiles, setProjectFiles] = React.useState([]);
       const [status, setStatus] = React.useState("Загрузка...");
       const [selectedSourceId, setSelectedSourceId] = React.useState(null);
+      const [selectedNodeIds, setSelectedNodeIds] = React.useState([]);
+      const [selectionBox, setSelectionBox] = React.useState(null);
       const [editingTitleId, setEditingTitleId] = React.useState(null);
       const [renamingBoard, setRenamingBoard] = React.useState(false);
       const [nodeStates, setNodeStates] = React.useState({});
       const [isPanning, setIsPanning] = React.useState(false);
-
       const activeBoard = React.useMemo(
         () => boards.find((b) => b.id === activeBoardId) || boards.at(0),
         [boards, activeBoardId]
@@ -224,7 +225,27 @@ window.__ModuleLoader__.load({
       const canvasRef = React.useRef(null);
       const viewRef = React.useRef(view);
       viewRef.current = view;
+      const nodesRef = React.useRef(nodes);
+      nodesRef.current = nodes;
+      const edgesRef = React.useRef(edges);
+      edgesRef.current = edges;
+      const selectedIdsRef = React.useRef(selectedNodeIds);
+      selectedIdsRef.current = selectedNodeIds;
+      const clipboardRef = React.useRef(null);
+      const spacePressedRef = React.useRef(false);
+      const historyRef = React.useRef({ past: [], future: [] });
       const [, forceTick] = React.useState(0);
+
+      const pushHistory = React.useCallback((customSnapshot) => {
+        const snap = customSnapshot || {
+          nodes: nodesRef.current.map((n) => ({ ...n })),
+          edges: edgesRef.current.map((ed) => ({ ...ed }))
+        };
+        const h = historyRef.current;
+        h.past.push(snap);
+        if (h.past.length > 40) h.past.shift();
+        h.future = [];
+      }, []);
 
       const updateActiveBoard = React.useCallback((updater) => {
         setBoards((prev) =>
@@ -236,10 +257,111 @@ window.__ModuleLoader__.load({
         );
       }, [activeBoardId]);
 
-      const setNodes = (fn) => updateActiveBoard((b) => ({ nodes: typeof fn === "function" ? fn(b.nodes) : fn }));
-      const setEdges = (fn) => updateActiveBoard((b) => ({ edges: typeof fn === "function" ? fn(b.edges) : fn }));
-      const setView = (fn) => updateActiveBoard((b) => ({ view: typeof fn === "function" ? fn(b.view || { x: 0, y: 0, zoom: 1 }) : fn }));
+      const setNodes = React.useCallback((fn) => updateActiveBoard((b) => ({ nodes: typeof fn === "function" ? fn(b.nodes) : fn })), [updateActiveBoard]);
+      const setEdges = React.useCallback((fn) => updateActiveBoard((b) => ({ edges: typeof fn === "function" ? fn(b.edges) : fn })), [updateActiveBoard]);
+      const setView = React.useCallback((fn) => updateActiveBoard((b) => ({ view: typeof fn === "function" ? fn(b.view || { x: 0, y: 0, zoom: 1 }) : fn })), [updateActiveBoard]);
       const setProjectDir = (dir) => updateActiveBoard({ projectDir: dir });
+      React.useEffect(() => {
+        const onKeyDown = (e) => {
+          const tag = (e.target && e.target.tagName) || "";
+          const isEditing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable);
+          if (e.code === "Space" && !isEditing) {
+            spacePressedRef.current = true;
+          }
+          if ((e.ctrlKey || e.metaKey) && !isEditing) {
+            if (e.code === "KeyA") {
+              e.preventDefault();
+              setSelectedNodeIds(nodesRef.current.map((n) => n.id));
+            } else if (e.code === "KeyC") {
+              const ids = selectedIdsRef.current;
+              if (ids.length > 0) {
+                e.preventDefault();
+                const idSet = new Set(ids);
+                const copiedNodes = nodesRef.current.filter((n) => idSet.has(n.id)).map((n) => ({ ...n }));
+                const copiedEdges = edgesRef.current.filter((ed) => idSet.has(ed.from) && idSet.has(ed.to)).map((ed) => ({ ...ed }));
+                clipboardRef.current = { nodes: copiedNodes, edges: copiedEdges, pasteCount: 0 };
+                setStatus("Скопировано нод: " + copiedNodes.length);
+              }
+            } else if (e.code === "KeyV" && clipboardRef.current && clipboardRef.current.nodes.length > 0) {
+              e.preventDefault();
+              pushHistory();
+              clipboardRef.current.pasteCount += 1;
+              const offset = 35 * clipboardRef.current.pasteCount;
+              const idMap = new Map();
+              const baseStamp = Date.now().toString().slice(-5);
+              const newNodes = clipboardRef.current.nodes.map((n, idx) => {
+                const newId = "n" + baseStamp + idx;
+                idMap.set(n.id, newId);
+                return { ...n, id: newId, x: n.x + offset, y: n.y + offset };
+              });
+              const newEdges = clipboardRef.current.edges
+                .map((ed) => ({ from: idMap.get(ed.from), to: idMap.get(ed.to) }))
+                .filter((ed) => ed.from && ed.to);
+              setNodes((prev) => [...prev, ...newNodes]);
+              if (newEdges.length > 0) {
+                setEdges((prev) => [...prev, ...newEdges]);
+              }
+              setSelectedNodeIds(newNodes.map((n) => n.id));
+              setStatus("Вставлено нод: " + newNodes.length);
+            } else if (e.code === "KeyZ" && !e.shiftKey) {
+              const h = historyRef.current;
+              if (h.past.length > 0) {
+                e.preventDefault();
+                const currentSnap = {
+                  nodes: nodesRef.current.map((n) => ({ ...n })),
+                  edges: edgesRef.current.map((ed) => ({ ...ed }))
+                };
+                h.future.push(currentSnap);
+                const prevSnap = h.past.pop();
+                setNodes(prevSnap.nodes);
+                setEdges(prevSnap.edges);
+                setSelectedNodeIds([]);
+                setStatus("Отменено (шагов: " + h.past.length + ")");
+              }
+            } else if ((e.code === "KeyZ" && e.shiftKey) || e.code === "KeyY") {
+              const h = historyRef.current;
+              if (h.future.length > 0) {
+                e.preventDefault();
+                const currentSnap = {
+                  nodes: nodesRef.current.map((n) => ({ ...n })),
+                  edges: edgesRef.current.map((ed) => ({ ...ed }))
+                };
+                h.past.push(currentSnap);
+                const nextSnap = h.future.pop();
+                setNodes(nextSnap.nodes);
+                setEdges(nextSnap.edges);
+                setSelectedNodeIds([]);
+                setStatus("Повторено");
+              }
+            }
+          }
+          if ((e.key === "Delete" || e.key === "Backspace") && !isEditing) {
+            const ids = selectedIdsRef.current;
+            if (ids.length > 0) {
+              e.preventDefault();
+              pushHistory();
+              const idSet = new Set(ids);
+              setNodes((prev) => prev.filter((n) => !idSet.has(n.id)));
+              setEdges((prev) => prev.filter((ed) => !idSet.has(ed.from) && !idSet.has(ed.to)));
+              setSelectedNodeIds([]);
+            }
+          }
+          if (e.key === "Escape") {
+            setSelectedNodeIds([]);
+            setSelectedSourceId(null);
+            setSelectionBox(null);
+          }
+        };
+        const onKeyUp = (e) => {
+          if (e.code === "Space") spacePressedRef.current = false;
+        };
+        window.addEventListener("keydown", onKeyDown);
+        window.addEventListener("keyup", onKeyUp);
+        return () => {
+          window.removeEventListener("keydown", onKeyDown);
+          window.removeEventListener("keyup", onKeyUp);
+        };
+      }, [setNodes, setEdges, pushHistory]);
       React.useEffect(() => {
         const payload = { boards, activeBoardId };
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
@@ -324,6 +446,8 @@ window.__ModuleLoader__.load({
         setActiveBoardId(id);
         setNodeStates({});
         setSelectedSourceId(null);
+        setSelectedNodeIds([]);
+        historyRef.current = { past: [], future: [] };
         setRenamingBoard(true);
       };
 
@@ -337,6 +461,8 @@ window.__ModuleLoader__.load({
         setActiveBoardId(rest.at(0).id);
         setNodeStates({});
         setSelectedSourceId(null);
+        setSelectedNodeIds([]);
+        historyRef.current = { past: [], future: [] };
       };
       const groupedModels = React.useMemo(() => {
         const map = new Map();
@@ -369,6 +495,7 @@ window.__ModuleLoader__.load({
       };
 
       const addNode = (type) => {
+        pushHistory();
         const id = "n" + Date.now().toString().slice(-4);
         const def = models.at(0) || { provider: "", id: "" };
         const v = viewRef.current;
@@ -380,13 +507,14 @@ window.__ModuleLoader__.load({
           id, type, title, x: cx, y: cy,
           provider: def.provider, model: def.id, systemPrompt: "", text: "", filePath: "", saveMd: true, fileName: "output.md"
         }]);
+        setSelectedNodeIds([id]);
         if (type === "file") refreshProjectFiles(projectDir);
       };
-
       const startResize = (e, node) => {
         if (e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
+        pushHistory();
         const startX = e.clientX;
         const startY = e.clientY;
         const origW = node.w || (node.type === "output" ? 420 : 320);
@@ -403,53 +531,153 @@ window.__ModuleLoader__.load({
         window.addEventListener("mousemove", onMove);
         window.addEventListener("mouseup", onUp);
       };
+
       const deleteNode = (id) => {
+        pushHistory();
         setNodes((prev) => prev.filter((n) => n.id !== id));
         setEdges((prev) => prev.filter((e) => e.from !== id && e.to !== id));
+        setSelectedNodeIds((prev) => prev.filter((nid) => nid !== id));
+      };
+
+      const handleNodeMouseDown = (e, node) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        if (e.shiftKey || e.ctrlKey || e.metaKey) {
+          setSelectedNodeIds((prev) =>
+            prev.includes(node.id) ? prev.filter((id) => id !== node.id) : [...prev, node.id]
+          );
+        } else if (!selectedIdsRef.current.includes(node.id)) {
+          setSelectedNodeIds([node.id]);
+        }
       };
       const startDrag = (e, node) => {
         if (e.button !== 0) return;
         if (e.target.closest("button, select, textarea, input, label")) return;
         e.stopPropagation();
+
+        const isMultiToggle = e.shiftKey || e.ctrlKey || e.metaKey;
+        let dragIds = selectedIdsRef.current;
+        if (isMultiToggle) {
+          dragIds = dragIds.includes(node.id) ? dragIds : [...dragIds, node.id];
+          setSelectedNodeIds(dragIds);
+        } else if (!dragIds.includes(node.id)) {
+          dragIds = [node.id];
+          setSelectedNodeIds(dragIds);
+        }
+
         const startClientX = e.clientX;
         const startClientY = e.clientY;
-        const origX = node.x;
-        const origY = node.y;
+        const beforeDragSnap = {
+          nodes: nodesRef.current.map((n) => ({ ...n })),
+          edges: edgesRef.current.map((ed) => ({ ...ed }))
+        };
+        let hasMoved = false;
+        const origPositions = new Map();
+        for (const n of nodesRef.current) {
+          if (dragIds.includes(n.id)) {
+            origPositions.set(n.id, { x: n.x, y: n.y });
+          }
+        }
+
         const onMove = (ev) => {
           const z = viewRef.current.zoom || 1;
-          updateNode(node.id, {
-            x: Math.round(origX + (ev.clientX - startClientX) / z),
-            y: Math.round(origY + (ev.clientY - startClientY) / z)
-          });
+          const dx = Math.round((ev.clientX - startClientX) / z);
+          const dy = Math.round((ev.clientY - startClientY) / z);
+          if (!hasMoved && (dx !== 0 || dy !== 0)) {
+            hasMoved = true;
+            pushHistory(beforeDragSnap);
+          }
+          setNodes((prev) =>
+            prev.map((n) => {
+              const orig = origPositions.get(n.id);
+              return orig ? { ...n, x: orig.x + dx, y: orig.y + dy } : n;
+            })
+          );
           forceTick((t) => t + 1);
         };
         const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
         window.addEventListener("mousemove", onMove);
         window.addEventListener("mouseup", onUp);
       };
-
       const handleCanvasMouseDown = (e) => {
         const isMiddle = e.button === 1;
         const isBgLeft = e.button === 0 && !e.target.closest("[data-ns-node]");
         if (!isMiddle && !isBgLeft) return;
         e.preventDefault();
-        setIsPanning(true);
-        const startClientX = e.clientX;
-        const startClientY = e.clientY;
-        const origX = viewRef.current.x;
-        const origY = viewRef.current.y;
+
+        if (isMiddle || (isBgLeft && spacePressedRef.current)) {
+          setIsPanning(true);
+          const startClientX = e.clientX;
+          const startClientY = e.clientY;
+          const origX = viewRef.current.x;
+          const origY = viewRef.current.y;
+          const onMove = (ev) => {
+            setView((prev) => ({
+              ...prev,
+              x: Math.round(origX + (ev.clientX - startClientX)),
+              y: Math.round(origY + (ev.clientY - startClientY))
+            }));
+          };
+          const onUp = () => {
+            setIsPanning(false);
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+          };
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", onUp);
+          return;
+        }
+
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const cRect = canvas.getBoundingClientRect();
+        const startX = e.clientX - cRect.left;
+        const startY = e.clientY - cRect.top;
+        const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+        const baseSelected = additive ? [...selectedIdsRef.current] : [];
+
+        if (!additive) {
+          setSelectedNodeIds([]);
+        }
+        setSelectedSourceId(null);
+        setSelectionBox({ x1: startX, y1: startY, x2: startX, y2: startY });
         const onMove = (ev) => {
-          setView((prev) => ({ ...prev, x: Math.round(origX + (ev.clientX - startClientX)), y: Math.round(origY + (ev.clientY - startClientY)) }));
+          const curX = ev.clientX - cRect.left;
+          const curY = ev.clientY - cRect.top;
+          setSelectionBox({ x1: startX, y1: startY, x2: curX, y2: curY });
+
+          const minX = Math.min(startX, curX);
+          const maxX = Math.max(startX, curX);
+          const minY = Math.min(startY, curY);
+          const maxY = Math.max(startY, curY);
+
+          if (maxX - minX < 3 && maxY - minY < 3) return;
+
+          const hitIds = new Set(baseSelected);
+          canvas.querySelectorAll("[data-ns-node]").forEach((el) => {
+            const r = el.getBoundingClientRect();
+            const nx1 = r.left - cRect.left;
+            const ny1 = r.top - cRect.top;
+            const nx2 = r.right - cRect.left;
+            const ny2 = r.bottom - cRect.top;
+            const intersects = nx1 <= maxX && nx2 >= minX && ny1 <= maxY && ny2 >= minY;
+            const id = el.getAttribute("data-ns-node");
+            if (intersects && id) {
+              hitIds.add(id);
+            }
+          });
+          setSelectedNodeIds(Array.from(hitIds));
         };
+
         const onUp = () => {
-          setIsPanning(false);
+          setSelectionBox(null);
           window.removeEventListener("mousemove", onMove);
           window.removeEventListener("mouseup", onUp);
         };
+
         window.addEventListener("mousemove", onMove);
         window.addEventListener("mouseup", onUp);
       };
-
       const handleWheel = (e) => {
         if (e.target.closest("textarea, select") && !e.ctrlKey) return;
         e.preventDefault();
@@ -469,6 +697,7 @@ window.__ModuleLoader__.load({
           zoom: nextZoom
         });
       };
+
       const saveNodeToMd = async (node, textOverride) => {
         const content = textOverride !== undefined ? textOverride : (node.text || "");
         if (!content.trim()) { setStatus("Нечего сохранять — текст пуст"); return; }
@@ -539,7 +768,6 @@ window.__ModuleLoader__.load({
             }
           }
         }
-
         setStatus(t.running);
         for (let step = 0; step < 15; step++) {
           let progressed = false;
@@ -603,13 +831,15 @@ window.__ModuleLoader__.load({
           const y2 = (r2.top + r2.height / 2 - cRect.top - view.y) / z;
           const dx = Math.max(50, Math.abs(x2 - x1) * 0.5);
           const d = "M " + x1 + " " + y1 + " C " + (x1 + dx) + " " + y1 + ", " + (x2 - dx) + " " + y2 + ", " + x2 + " " + y2;
-          return jsx("path", { d, stroke: "var(--dsw-alias-brand-primary, #3b82f6)", strokeWidth: "3", fill: "none", style: { cursor: "pointer", pointerEvents: "stroke" }, onClick: () => setEdges((prev) => prev.filter((e) => !(e.from === edge.from && e.to === edge.to))) }, edge.from + "-" + edge.to + "-" + idx);
+          return jsx("path", { d, stroke: "var(--dsw-alias-brand-primary, #3b82f6)", strokeWidth: "3", fill: "none", style: { cursor: "pointer", pointerEvents: "stroke" }, onClick: () => { pushHistory(); setEdges((prev) => prev.filter((e) => !(e.from === edge.from && e.to === edge.to))); } }, edge.from + "-" + edge.to + "-" + idx);
         });
       };
 
       const btn = { background: "var(--dsw-alias-bg-layer-3, #21262d)", color: "var(--dsw-alias-label-primary, #e5e7eb)", border: "1px solid var(--dsw-alias-border-l2, #30363d)", borderRadius: "8px", padding: "5px 9px", fontSize: "12px", cursor: "pointer" };
       const inp = { width: "100%", boxSizing: "border-box", background: "var(--dsw-alias-bg-base, #0d1117)", color: "var(--dsw-alias-label-primary, #e5e7eb)", border: "1px solid var(--dsw-alias-border-l2, #30363d)", borderRadius: "7px", padding: "6px 8px", fontSize: "14px", lineHeight: "1.45", fontFamily: "inherit" };
       const gridStep = Math.max(8, Math.round(20 * view.zoom));
+      const selectedSet = React.useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
+
       return jsxs("div", {
         style: { display: "flex", flexDirection: "column", height: "100%", width: "100%", overflow: "hidden", color: "var(--dsw-alias-label-primary, #e5e7eb)", background: "var(--dsw-alias-bg-base, #0f1117)" },
         children: [
@@ -618,7 +848,7 @@ window.__ModuleLoader__.load({
             children: [
               renamingBoard
                 ? jsx("input", { autoFocus: true, style: { ...inp, width: "175px", padding: "4px 7px", fontWeight: 600 }, value: activeBoard.name, onChange: (e) => updateActiveBoard({ name: e.target.value }), onBlur: () => setRenamingBoard(false), onKeyDown: (e) => { if (e.key === "Enter" || e.key === "Escape") setRenamingBoard(false); } })
-                : jsx("select", { style: { ...inp, width: "180px", padding: "4px 6px", fontWeight: 600 }, value: activeBoardId, onChange: (e) => { setActiveBoardId(e.target.value); setNodeStates({}); setSelectedSourceId(null); }, children: boards.map((b) => jsx("option", { value: b.id, children: b.name }, b.id)) }),
+                : jsx("select", { style: { ...inp, width: "180px", padding: "4px 6px", fontWeight: 600 }, value: activeBoardId, onChange: (e) => { setActiveBoardId(e.target.value); setNodeStates({}); setSelectedSourceId(null); setSelectedNodeIds([]); historyRef.current = { past: [], future: [] }; }, children: boards.map((b) => jsx("option", { value: b.id, children: b.name }, b.id)) }),
               jsx("button", { type: "button", style: btn, onClick: () => setRenamingBoard((v) => !v), children: t.rename }),
               jsx("button", { type: "button", style: { ...btn, background: "#1f6feb", borderColor: "#388bfd", color: "#fff" }, onClick: createNewBoard, children: t.newBoard }),
               boards.length > 1 ? jsx("button", { type: "button", style: { ...btn, color: "#f87171" }, onClick: deleteActiveBoard, children: t.delBoard }) : null,
@@ -641,7 +871,7 @@ window.__ModuleLoader__.load({
             onMouseDown: handleCanvasMouseDown,
             onWheel: handleWheel,
             onAuxClick: (e) => { if (e.button === 1) e.preventDefault(); },
-            style: { position: "relative", flex: 1, overflow: "hidden", cursor: isPanning ? "grabbing" : "grab", backgroundImage: "radial-gradient(rgba(140,150,165,0.22) 1px, transparent 1px)", backgroundSize: gridStep + "px " + gridStep + "px", backgroundPosition: view.x + "px " + view.y + "px" },
+            style: { position: "relative", flex: 1, overflow: "hidden", userSelect: selectionBox ? "none" : "auto", cursor: isPanning ? "grabbing" : "default", backgroundImage: "radial-gradient(rgba(140,150,165,0.22) 1px, transparent 1px)", backgroundSize: gridStep + "px " + gridStep + "px", backgroundPosition: view.x + "px " + view.y + "px" },
             children: [
               jsxs("div", {
                 style: { position: "absolute", left: "0px", top: "0px", transform: "translate(" + view.x + "px, " + view.y + "px) scale(" + view.zoom + ")", transformOrigin: "0 0" },
@@ -649,20 +879,33 @@ window.__ModuleLoader__.load({
                   jsx("svg", { style: { position: "absolute", left: "0px", top: "0px", width: "8000px", height: "8000px", overflow: "visible", pointerEvents: "none" }, children: renderCurves() }),
                   nodes.map((node) => {
                     const st = nodeStates[node.id];
-                    const bc = st === "running" ? "#f59e0b" : st === "done" ? "#2ea043" : st === "error" ? "#f85149" : "var(--dsw-alias-border-l2, #30363d)";
+                    const isSelected = selectedSet.has(node.id);
+                    const bc = st === "running"
+                      ? "#f59e0b"
+                      : st === "done"
+                        ? "#2ea043"
+                        : st === "error"
+                          ? "#f85149"
+                          : isSelected
+                            ? "#3b82f6"
+                            : "#444c5c";
+                    const shadow = isSelected
+                      ? "0 0 0 2px rgba(59,130,246,0.45), 0 10px 28px rgba(0,0,0,0.45)"
+                      : "0 0 0 1px rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.4)";
                     const sel = node.provider && node.model ? node.provider + "::" + node.model : "";
                     const inCount = edges.filter((e) => e.to === node.id).length;
                     const isSourceOnly = node.type === "input" || node.type === "file";
                     return jsxs("div", {
                       "data-ns-node": node.id,
-                      style: { position: "absolute", left: node.x + "px", top: node.y + "px", width: (node.w || (node.type === "output" ? 420 : 320)) + "px", minWidth: "280px", minHeight: "170px", height: node.h ? node.h + "px" : "auto", display: "flex", flexDirection: "column", background: "var(--dsw-alias-bg-layer-2, #161b22)", border: "1.5px solid " + bc, borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.35)", cursor: "default" },
+                      onMouseDown: (e) => handleNodeMouseDown(e, node),
+                      style: { position: "absolute", left: node.x + "px", top: node.y + "px", width: (node.w || (node.type === "output" ? 420 : 320)) + "px", minWidth: "280px", minHeight: "170px", height: node.h ? node.h + "px" : "auto", display: "flex", flexDirection: "column", background: "var(--dsw-alias-bg-layer-2, #161b22)", border: "1.5px solid " + bc, borderRadius: "10px", boxShadow: shadow, cursor: "default" },
                       children: [
-                        !isSourceOnly ? jsx("div", { "data-port-in": node.id, title: "Вход (" + inCount + ")", onClick: (e) => { e.stopPropagation(); if (selectedSourceId && selectedSourceId !== node.id) { setEdges((prev) => prev.some((ed) => ed.from === selectedSourceId && ed.to === node.id) ? prev : [...prev, { from: selectedSourceId, to: node.id }]); setSelectedSourceId(null); } }, style: { position: "absolute", left: "-8px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", borderRadius: "50%", background: "#10b981", border: "2px solid #0f1117", cursor: "crosshair" } }) : null,
+                        !isSourceOnly ? jsx("div", { "data-port-in": node.id, title: "Вход (" + inCount + ")", onClick: (e) => { e.stopPropagation(); if (selectedSourceId && selectedSourceId !== node.id) { pushHistory(); setEdges((prev) => prev.some((ed) => ed.from === selectedSourceId && ed.to === node.id) ? prev : [...prev, { from: selectedSourceId, to: node.id }]); setSelectedSourceId(null); } }, style: { position: "absolute", left: "-8px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", borderRadius: "50%", background: "#10b981", border: "2px solid #0f1117", cursor: "crosshair" } }) : null,
                         node.type !== "output" ? jsx("div", { "data-port-out": node.id, title: "Выход", onClick: (e) => { e.stopPropagation(); setSelectedSourceId((cur) => (cur === node.id ? null : node.id)); }, style: { position: "absolute", right: "-8px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", borderRadius: "50%", background: "#3b82f6", border: "2px solid #0f1117", outline: selectedSourceId === node.id ? "3px solid #f59e0b" : "none", cursor: "crosshair" } }) : null,
                         jsxs("div", {
                           onMouseDown: (e) => startDrag(e, node),
                           onDoubleClick: () => setEditingTitleId(node.id),
-                          style: { padding: "8px 12px", borderBottom: "1px solid var(--dsw-alias-border-l2, #30363d)", fontSize: "13px", fontWeight: 600, cursor: "grab", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px" },
+                          style: { padding: "8px 12px", borderBottom: "1px solid var(--dsw-alias-border-l2, #30363d)", fontSize: "13px", fontWeight: 600, cursor: "grab", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px", background: isSelected ? "rgba(59,130,246,0.12)" : "transparent", borderRadius: "8px 8px 0 0" },
                           children: [
                             editingTitleId === node.id
                               ? jsx("input", { autoFocus: true, style: { ...inp, padding: "2px 6px", fontWeight: 600 }, value: node.title, onChange: (e) => updateNode(node.id, { title: e.target.value }), onBlur: () => setEditingTitleId(null), onKeyDown: (e) => { if (e.key === "Enter") setEditingTitleId(null); } })
@@ -691,51 +934,66 @@ window.__ModuleLoader__.load({
                                 jsx("label", { style: { opacity: 0.75 }, children: t.providerModel }),
                                 jsx("select", { style: inp, value: sel, onChange: (e) => { const p = e.target.value.split("::"); updateNode(node.id, { provider: p.at(0), model: p.at(1) }); }, children: groupedModels.length === 0 ? jsx("option", { value: "", children: "Нет моделей" }) : groupedModels.map(([g, items]) => jsx("optgroup", { label: g, children: items.map((m) => { const v = m.provider + "::" + m.id; return jsx("option", { value: v, children: m.name + " (" + m.id + ")" }, v); }) }, g)) }),
                                 jsxs("div", {
-  style: { display: "flex", alignItems: "center", gap: "8px" },
-  children: [
-    jsx("span", { style: { opacity: 0.75, whiteSpace: "nowrap" }, children: t.temp + (node.temperature !== undefined ? Number(node.temperature) : 0.7).toFixed(1) }),
-    jsx("input", {
-      type: "range", min: "0", max: "1.8", step: "0.1",
-      value: String(node.temperature !== undefined ? node.temperature : 0.7),
-      style: { flex: 1, cursor: "pointer" },
-      onChange: (e) => updateNode(node.id, { temperature: Number(e.target.value) })
-    })
-  ]
-}),
-jsx("label", { style: { opacity: 0.75 }, children: t.sysPrompt }),
-jsx("textarea", { rows: 3, style: { ...inp, flex: 1, minHeight: "75px", resize: "none" }, value: node.systemPrompt || "", placeholder: t.sysPromptPh, onChange: (e) => updateNode(node.id, { systemPrompt: e.target.value }) })
-]
-}) : null,
-node.type === "output" ? jsxs(React.Fragment, {
-children: [
-jsx("textarea", { rows: 6, style: { ...inp, flex: 1, minHeight: "130px", resize: "none" }, value: node.text || "", placeholder: t.outputPh, onChange: (e) => updateNode(node.id, { text: e.target.value }) }),
-jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", opacity: 0.9 }, children: [jsx("input", { type: "checkbox", checked: Boolean(node.saveMd), onChange: (e) => updateNode(node.id, { saveMd: e.target.checked }) }), jsx("span", { children: t.saveMdChk })] }),
-node.saveMd ? jsx("input", { style: { ...inp, padding: "4px 7px" }, value: node.fileName || "", placeholder: t.fileNamePh, onChange: (e) => updateNode(node.id, { fileName: e.target.value }) }) : null,
-jsxs("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" }, children: [jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => saveNodeToMd(node), children: t.saveMdBtn }), jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => sendToNewSession(node), children: t.newSessionBtn })] })
-]
-}) : null
-]
-})
-                      , jsx("div", { onMouseDown: (e) => startResize(e, node), title: "Потяните за уголок", style: { position: "absolute", right: "0px", bottom: "0px", width: "18px", height: "18px", cursor: "nwse-resize", background: "linear-gradient(135deg, transparent 50%, #3b82f6 50%)", borderRadius: "0 0 9px 0", zIndex: 10 } })]
+                                  style: { display: "flex", alignItems: "center", gap: "8px" },
+                                  children: [
+                                    jsx("span", { style: { opacity: 0.75, whiteSpace: "nowrap" }, children: t.temp + (node.temperature !== undefined ? Number(node.temperature) : 0.7).toFixed(1) }),
+                                    jsx("input", {
+                                      type: "range", min: "0", max: "1.8", step: "0.1",
+                                      value: String(node.temperature !== undefined ? node.temperature : 0.7),
+                                      style: { flex: 1, cursor: "pointer" },
+                                      onChange: (e) => updateNode(node.id, { temperature: Number(e.target.value) })
+                                    })
+                                  ]
+                                }),
+                                jsx("label", { style: { opacity: 0.75 }, children: t.sysPrompt }),
+                                jsx("textarea", { rows: 3, style: { ...inp, flex: 1, minHeight: "75px", resize: "none" }, value: node.systemPrompt || "", placeholder: t.sysPromptPh, onChange: (e) => updateNode(node.id, { systemPrompt: e.target.value }) })
+                              ]
+                            }) : null,
+                            node.type === "output" ? jsxs(React.Fragment, {
+                              children: [
+                                jsx("textarea", { rows: 6, style: { ...inp, flex: 1, minHeight: "130px", resize: "none" }, value: node.text || "", placeholder: t.outputPh, onChange: (e) => updateNode(node.id, { text: e.target.value }) }),
+                                jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", opacity: 0.9 }, children: [jsx("input", { type: "checkbox", checked: Boolean(node.saveMd), onChange: (e) => updateNode(node.id, { saveMd: e.target.checked }) }), jsx("span", { children: t.saveMdChk })] }),
+                                node.saveMd ? jsx("input", { style: { ...inp, padding: "4px 7px" }, value: node.fileName || "", placeholder: t.fileNamePh, onChange: (e) => updateNode(node.id, { fileName: e.target.value }) }) : null,
+                                jsxs("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" }, children: [jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => saveNodeToMd(node), children: t.saveMdBtn }), jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => sendToNewSession(node), children: t.newSessionBtn })] })
+                              ]
+                            }) : null
+                          ]
+                        }),
+                        jsx("div", { onMouseDown: (e) => startResize(e, node), title: "Потяните за уголок", style: { position: "absolute", right: "0px", bottom: "0px", width: "18px", height: "18px", cursor: "nwse-resize", background: "linear-gradient(135deg, transparent 50%, #3b82f6 50%)", borderRadius: "0 0 9px 0", zIndex: 10 } })
+                      ]
                     }, node.id);
-})
-]
-})
-]
-})
-]
-});
-}
-function apply(ctx) {
-const slots = ctx.slots;
-ctx.effect(() => {
-const d1 = slots.inject("sidebar.panellist", () => slots.register({ name: "sidebar.panellist", id: PANEL_ID, order: PANEL_ORDER, label: () => "Node Studio" }, NodeStudioIcon));
-const d2 = slots.inject("main", () => slots.register({ name: "main", key: PANEL_ID }, () => jsx(NodeStudioPage, { localeSvc: ctx.locale })));
-return () => { d1(); d2(); };
-}, "dsh-node-studio: sidebar and main panel");
-}
-exports.apply = apply;
-exports.inject = inject;
-return module.exports;
-}
+                  })
+                ]
+              }),
+              selectionBox ? jsx("div", {
+                style: {
+                  position: "absolute",
+                  left: Math.min(selectionBox.x1, selectionBox.x2) + "px",
+                  top: Math.min(selectionBox.y1, selectionBox.y2) + "px",
+                  width: Math.abs(selectionBox.x2 - selectionBox.x1) + "px",
+                  height: Math.abs(selectionBox.y2 - selectionBox.y1) + "px",
+                  border: "1px solid #3b82f6",
+                  background: "rgba(59, 130, 246, 0.16)",
+                  borderRadius: "4px",
+                  pointerEvents: "none",
+                  zIndex: 50
+                }
+              }) : null
+            ]
+          })
+        ]
+      });
+    }
+    function apply(ctx) {
+      const slots = ctx.slots;
+      ctx.effect(() => {
+        const d1 = slots.inject("sidebar.panellist", () => slots.register({ name: "sidebar.panellist", id: PANEL_ID, order: PANEL_ORDER, label: () => "Node Studio" }, NodeStudioIcon));
+        const d2 = slots.inject("main", () => slots.register({ name: "main", key: PANEL_ID }, () => jsx(NodeStudioPage, { localeSvc: ctx.locale })));
+        return () => { d1(); d2(); };
+      }, "dsh-node-studio: sidebar and main panel");
+    }
+    exports.apply = apply;
+    exports.inject = inject;
+    return module.exports;
+  }
 });
