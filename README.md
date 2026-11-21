@@ -3,6 +3,7 @@
 A visual node-based workflow editor plugin for **DeepSeek Harness (DSH)** to build multi-step AI pipelines, chain LLM agents, and export results.
 
 <img width="1362" height="817" alt="image" src="https://github.com/user-attachments/assets/6ae3d541-89b1-47d0-9b3d-91d66f3b8089" />
+<img width="1340" height="898" alt="image" src="https://github.com/user-attachments/assets/499f5545-c05c-44fc-8c71-63f7b07fc49c" />
 
 
 ## Key Features
@@ -45,6 +46,11 @@ The plugin reads keys and `baseURL` from your DSH profile. For keys stored outsi
 - **Duplicate & Delete**: Press `Ctrl+C` / `Ctrl+V` to copy and paste selected nodes along with their internal connections, or `Delete` / `Backspace` to remove them.
 - **Undo / Redo**: Press `Ctrl+Z` to undo and `Ctrl+Shift+Z` (or `Ctrl+Y`) to redo canvas changes.
 - **Canvas Navigation**: Hold the middle mouse button (or `Space + Left Drag`) to pan and use the mouse wheel to zoom.
+- 
+- **Per-Node Execution & Abort Controls**: Run or stop individual LLM nodes (and their downstream chains) with `▶` / `■` buttons right in the node header, or use the global **Stop** button to halt execution at any time.
+- **Collapsible Nodes**: Collapse any node into a compact bar (`▼` / `▶`) while keeping ports connected and live progress dots visible.
+- **Output Utilities**: Added a live character and word counter alongside a one-click **Copy** button in output nodes.
+
 
 ## License
 
