@@ -12,6 +12,7 @@ window.__ModuleLoader__.load({
     const PANEL_ORDER = 35;
     const STORAGE_KEY = "dsh-node-studio-boards-v2";
     const inject = ["slots", "locale"];
+
     function NodeStudioIcon({ size }) {
       return jsxs("svg", {
         "data-dsh-panel-entry": PANEL_ID,
@@ -51,6 +52,7 @@ window.__ModuleLoader__.load({
         ]
       };
     }
+
     function normalizeBoardsData(raw) {
       if (raw && Array.isArray(raw.boards) && raw.boards.length > 0) {
         const activeId = raw.boards.some((b) => b.id === raw.activeBoardId) ? raw.activeBoardId : raw.boards.at(0).id;
@@ -89,6 +91,15 @@ window.__ModuleLoader__.load({
         addOut: "+ Вывод",
         projectDirPh: "Папка проекта...",
         runGraph: "Запустить граф",
+        stopGraph: "Стоп",
+        stopped: "Остановлено пользователем",
+        runNodeTip: "Запустить эту ноду и цепочку после неё",
+        stopNodeTip: "Остановить генерацию",
+        collapseTip: "Свернуть / развернуть ноду",
+        copyBtn: "Копировать",
+        copiedBtn: "✓ Скопировано",
+        charsLabel: "симв.",
+        wordsLabel: "слов",
         modelsCount: "Моделей: ",
         running: "Выполнение графа...",
         readingInputs: "Чтение входных узлов...",
@@ -122,6 +133,15 @@ window.__ModuleLoader__.load({
         addOut: "+ Output",
         projectDirPh: "Project folder...",
         runGraph: "Run Graph",
+        stopGraph: "Stop",
+        stopped: "Stopped by user",
+        runNodeTip: "Run this node and downstream chain",
+        stopNodeTip: "Stop generation",
+        collapseTip: "Collapse / expand node",
+        copyBtn: "Copy",
+        copiedBtn: "✓ Copied",
+        charsLabel: "chars",
+        wordsLabel: "words",
         modelsCount: "Models: ",
         running: "Running graph...",
         readingInputs: "Reading input nodes...",
@@ -155,6 +175,15 @@ window.__ModuleLoader__.load({
         addOut: "+ 输出",
         projectDirPh: "项目文件夹...",
         runGraph: "运行工作流",
+        stopGraph: "停止",
+        stopped: "已停止运行",
+        runNodeTip: "运行此节点及后续节点",
+        stopNodeTip: "停止生成",
+        collapseTip: "折叠 / 展开节点",
+        copyBtn: "复制",
+        copiedBtn: "✓ 已复制",
+        charsLabel: "字符",
+        wordsLabel: "词",
         modelsCount: "可用模型: ",
         running: "正在运行...",
         readingInputs: "正在读取输入...",
@@ -179,7 +208,6 @@ window.__ModuleLoader__.load({
         boardPrefix: "子项目 "
       }
     };
-
     function detectLang(localeSvc) {
       const raw = (localeSvc && (localeSvc.current || localeSvc.locale || localeSvc.lang))
         || (typeof document !== "undefined" && document.documentElement && document.documentElement.lang)
@@ -190,6 +218,7 @@ window.__ModuleLoader__.load({
       if (low.startsWith("zh")) return "zh";
       return "ru";
     }
+
     function NodeStudioPage({ localeSvc }) {
       const initial = React.useMemo(() => loadLocalBoards(), []);
       const [lang, setLang] = React.useState(() => detectLang(localeSvc));
@@ -212,12 +241,13 @@ window.__ModuleLoader__.load({
       const [editingTitleId, setEditingTitleId] = React.useState(null);
       const [renamingBoard, setRenamingBoard] = React.useState(false);
       const [nodeStates, setNodeStates] = React.useState({});
+      const [isRunning, setIsRunning] = React.useState(false);
+      const [copiedNodeId, setCopiedNodeId] = React.useState(null);
       const [isPanning, setIsPanning] = React.useState(false);
       const activeBoard = React.useMemo(
         () => boards.find((b) => b.id === activeBoardId) || boards.at(0),
         [boards, activeBoardId]
       );
-
       const nodes = activeBoard.nodes || [];
       const edges = activeBoard.edges || [];
       const view = activeBoard.view || { x: 0, y: 0, zoom: 1 };
@@ -234,6 +264,8 @@ window.__ModuleLoader__.load({
       const clipboardRef = React.useRef(null);
       const spacePressedRef = React.useRef(false);
       const historyRef = React.useRef({ past: [], future: [] });
+      const abortCtrlRef = React.useRef(null);
+      const lastOutputsRef = React.useRef(new Map());
       const [, forceTick] = React.useState(0);
 
       const pushHistory = React.useCallback((customSnapshot) => {
@@ -389,6 +421,7 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         refreshProjectFiles(projectDir);
       }, [projectDir, refreshProjectFiles]);
+
       const loadInitialData = React.useCallback(async () => {
         try {
           const stRes = await fetch("dsh-node-studio/api/state", { cache: "no-store" });
@@ -433,9 +466,9 @@ window.__ModuleLoader__.load({
           projectDir: projectDir || (workspaces.at(0) ? workspaces.at(0).path : ""),
           view: { x: 0, y: 0, zoom: 1 },
           nodes: [
-            { id: "n1", type: "input", title: "Ввод", x: 60, y: 90, text: "" },
-            { id: "n2", type: "llm", title: "LLM-Агент", x: 420, y: 80, provider: defModel.provider, model: defModel.id, systemPrompt: "" },
-            { id: "n3", type: "output", title: "Результат", x: 780, y: 80, text: "", saveMd: true, fileName: "project-" + num + ".md" }
+            { id: "n1", type: "input", title: "Input text", x: 60, y: 90, text: "" },
+            { id: "n2", type: "llm", title: "LLM-Agent", x: 420, y: 80, provider: defModel.provider, model: defModel.id, systemPrompt: "" },
+            { id: "n3", type: "output", title: "Result", x: 780, y: 80, text: "", saveMd: true, fileName: "project-" + num + ".md" }
           ],
           edges: [
             { from: "n1", to: "n2" },
@@ -447,6 +480,7 @@ window.__ModuleLoader__.load({
         setNodeStates({});
         setSelectedSourceId(null);
         setSelectedNodeIds([]);
+        lastOutputsRef.current.clear();
         historyRef.current = { past: [], future: [] };
         setRenamingBoard(true);
       };
@@ -462,8 +496,10 @@ window.__ModuleLoader__.load({
         setNodeStates({});
         setSelectedSourceId(null);
         setSelectedNodeIds([]);
+        lastOutputsRef.current.clear();
         historyRef.current = { past: [], future: [] };
       };
+
       const groupedModels = React.useMemo(() => {
         const map = new Map();
         for (const m of models) {
@@ -475,6 +511,26 @@ window.__ModuleLoader__.load({
       }, [models]);
 
       const updateNode = (id, patch) => setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n)));
+      const copyNodeText = async (node) => {
+        const txt = node.text || "";
+        if (!txt) return;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(txt);
+          } else {
+            const ta = document.createElement("textarea");
+            ta.value = txt;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+          }
+          setCopiedNodeId(node.id);
+          setTimeout(() => setCopiedNodeId((cur) => (cur === node.id ? null : cur)), 1600);
+        } catch {
+          setStatus("Не удалось скопировать текст");
+        }
+      };
 
       const loadFileIntoNode = async (nodeId, relPath) => {
         updateNode(nodeId, { filePath: relPath });
@@ -534,6 +590,7 @@ window.__ModuleLoader__.load({
 
       const deleteNode = (id) => {
         pushHistory();
+        lastOutputsRef.current.delete(id);
         setNodes((prev) => prev.filter((n) => n.id !== id));
         setEdges((prev) => prev.filter((e) => e.from !== id && e.to !== id));
         setSelectedNodeIds((prev) => prev.filter((nid) => nid !== id));
@@ -550,6 +607,7 @@ window.__ModuleLoader__.load({
           setSelectedNodeIds([node.id]);
         }
       };
+
       const startDrag = (e, node) => {
         if (e.button !== 0) return;
         if (e.target.closest("button, select, textarea, input, label")) return;
@@ -678,6 +736,7 @@ window.__ModuleLoader__.load({
         window.addEventListener("mousemove", onMove);
         window.addEventListener("mouseup", onUp);
       };
+
       const handleWheel = (e) => {
         if (e.target.closest("textarea, select") && !e.ctrlKey) return;
         e.preventDefault();
@@ -733,86 +792,160 @@ window.__ModuleLoader__.load({
           setStatus("Ошибка сессии: " + err.message);
         }
       };
-      const runGraph = async () => {
+      const stopGraph = () => {
+        if (abortCtrlRef.current) {
+          abortCtrlRef.current.abort();
+          abortCtrlRef.current = null;
+        }
+        setIsRunning(false);
+        setNodeStates((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(next)) {
+            if (next[k] === "running") delete next[k];
+          }
+          return next;
+        });
+        setStatus(t.stopped);
+      };
+
+      const runGraph = async (startNodeId = null) => {
+        if (abortCtrlRef.current) {
+          abortCtrlRef.current.abort();
+        }
+        const ctrl = new AbortController();
+        abortCtrlRef.current = ctrl;
+        const signal = ctrl.signal;
+
+        setIsRunning(true);
         const values = new Map();
         const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-        setNodeStates({});
-        setStatus(t.readingInputs);
 
-        for (const n of nodes) {
-          if (n.type === "input") {
-            values.set(n.id, n.text || "");
-          } else if (n.type === "file") {
-            if (!n.filePath) {
-              setNodeStates((s) => ({ ...s, [n.id]: "error" }));
-              setStatus('В узле "' + n.title + '" не выбран файл');
-              return;
-            }
-            setNodeStates((s) => ({ ...s, [n.id]: "running" }));
-            try {
-              const resp = await fetch("dsh-node-studio/api/read-file", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ projectDir, filePath: n.filePath })
-              });
-              const data = await resp.json();
-              if (!resp.ok) throw new Error(data.error || "Ошибка чтения файла");
-              const freshText = data.content || "";
-              updateNode(n.id, { text: freshText });
-              values.set(n.id, freshText);
-              setNodeStates((s) => ({ ...s, [n.id]: "done" }));
-            } catch (err) {
-              setNodeStates((s) => ({ ...s, [n.id]: "error" }));
-              setStatus('Ошибка в "' + n.title + '": ' + err.message);
-              return;
+        let targetSet = null;
+        if (startNodeId) {
+          targetSet = new Set([startNodeId]);
+          let added = true;
+          while (added) {
+            added = false;
+            for (const ed of edges) {
+              if (targetSet.has(ed.from) && !targetSet.has(ed.to)) {
+                targetSet.add(ed.to);
+                added = true;
+              }
             }
           }
+          for (const [k, v] of lastOutputsRef.current.entries()) {
+            if (!targetSet.has(k)) values.set(k, v);
+          }
+          setNodeStates((prev) => {
+            const next = { ...prev };
+            for (const id of targetSet) delete next[id];
+            return next;
+          });
+        } else {
+          setNodeStates({});
         }
-        setStatus(t.running);
-        for (let step = 0; step < 15; step++) {
-          let progressed = false;
+
+        setStatus(t.readingInputs);
+
+        try {
           for (const n of nodes) {
-            if (values.has(n.id)) continue;
-            const incomingEdges = edges.filter((ed) => ed.to === n.id);
-            if (incomingEdges.length === 0) continue;
-            if (!incomingEdges.every((ed) => values.has(ed.from))) continue;
-
-            const combinedInput = incomingEdges.length === 1
-              ? values.get(incomingEdges.at(0).from)
-              : incomingEdges.map((ed) => {
-                  const src = nodeMap.get(ed.from);
-                  return "=== " + (src ? src.title : ed.from) + " ===\n" + values.get(ed.from);
-                }).join("\n\n");
-
-            if (n.type === "output") {
-              updateNode(n.id, { text: combinedInput });
-              values.set(n.id, combinedInput);
-              setNodeStates((s) => ({ ...s, [n.id]: "done" }));
-              if (n.saveMd) await saveNodeToMd(n, combinedInput);
-              progressed = true;
-            } else if (n.type === "llm") {
+            if (signal.aborted) return;
+            if (n.type === "input") {
+              const txt = n.text || "";
+              values.set(n.id, txt);
+              lastOutputsRef.current.set(n.id, txt);
+            } else if (n.type === "file") {
+              if (targetSet && !targetSet.has(n.id) && values.has(n.id)) continue;
+              if (!n.filePath) {
+                setNodeStates((s) => ({ ...s, [n.id]: "error" }));
+                setStatus('В узле "' + n.title + '" не выбран файл');
+                return;
+              }
               setNodeStates((s) => ({ ...s, [n.id]: "running" }));
               try {
-                const resp = await fetch("dsh-node-studio/api/run", {
+                const resp = await fetch("dsh-node-studio/api/read-file", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ provider: n.provider, model: n.model, systemPrompt: n.systemPrompt, userPrompt: combinedInput, temperature: n.temperature !== undefined ? n.temperature : 0.7 })
+                  body: JSON.stringify({ projectDir, filePath: n.filePath }),
+                  signal
                 });
                 const data = await resp.json();
-                if (!resp.ok) throw new Error(data.error || "Ошибка API");
-                values.set(n.id, data.output);
+                if (!resp.ok) throw new Error(data.error || "Ошибка чтения файла");
+                const freshText = data.content || "";
+                updateNode(n.id, { text: freshText });
+                values.set(n.id, freshText);
+                lastOutputsRef.current.set(n.id, freshText);
                 setNodeStates((s) => ({ ...s, [n.id]: "done" }));
-                progressed = true;
               } catch (err) {
+                if (err.name === "AbortError" || signal.aborted) return;
                 setNodeStates((s) => ({ ...s, [n.id]: "error" }));
                 setStatus('Ошибка в "' + n.title + '": ' + err.message);
                 return;
               }
             }
           }
-          if (!progressed) break;
+
+          setStatus(t.running);
+          for (let step = 0; step < 15; step++) {
+            if (signal.aborted) return;
+            let progressed = false;
+            for (const n of nodes) {
+              if (signal.aborted) return;
+              if (values.has(n.id)) continue;
+              if (targetSet && !targetSet.has(n.id)) continue;
+
+              const incomingEdges = edges.filter((ed) => ed.to === n.id);
+              if (incomingEdges.length === 0) continue;
+              if (!incomingEdges.every((ed) => values.has(ed.from))) continue;
+
+              const combinedInput = incomingEdges.length === 1
+                ? values.get(incomingEdges.at(0).from)
+                : incomingEdges.map((ed) => {
+                    const src = nodeMap.get(ed.from);
+                    return "=== " + (src ? src.title : ed.from) + " ===\n" + values.get(ed.from);
+                  }).join("\n\n");
+
+              if (n.type === "output") {
+                updateNode(n.id, { text: combinedInput });
+                values.set(n.id, combinedInput);
+                lastOutputsRef.current.set(n.id, combinedInput);
+                setNodeStates((s) => ({ ...s, [n.id]: "done" }));
+                if (n.saveMd) await saveNodeToMd(n, combinedInput);
+                progressed = true;
+              } else if (n.type === "llm") {
+                setNodeStates((s) => ({ ...s, [n.id]: "running" }));
+                try {
+                  const resp = await fetch("dsh-node-studio/api/run", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ provider: n.provider, model: n.model, systemPrompt: n.systemPrompt, userPrompt: combinedInput, temperature: n.temperature !== undefined ? n.temperature : 0.7 }),
+                    signal
+                  });
+                  const data = await resp.json();
+                  if (!resp.ok) throw new Error(data.error || "Ошибка API");
+                  values.set(n.id, data.output);
+                  lastOutputsRef.current.set(n.id, data.output);
+                  setNodeStates((s) => ({ ...s, [n.id]: "done" }));
+                  progressed = true;
+                } catch (err) {
+                  if (err.name === "AbortError" || signal.aborted) return;
+                  setNodeStates((s) => ({ ...s, [n.id]: "error" }));
+                  setStatus('Ошибка в "' + n.title + '": ' + err.message);
+                  return;
+                }
+              }
+            }
+            if (!progressed) break;
+          }
+          if (!signal.aborted) {
+            setStatus(t.done);
+          }
+        } finally {
+          if (abortCtrlRef.current === ctrl) {
+            abortCtrlRef.current = null;
+            setIsRunning(false);
+          }
         }
-        setStatus(t.done);
       };
       const renderCurves = () => {
         const canvas = canvasRef.current;
@@ -839,16 +972,18 @@ window.__ModuleLoader__.load({
       const inp = { width: "100%", boxSizing: "border-box", background: "var(--dsw-alias-bg-base, #0d1117)", color: "var(--dsw-alias-label-primary, #e5e7eb)", border: "1px solid var(--dsw-alias-border-l2, #30363d)", borderRadius: "7px", padding: "6px 8px", fontSize: "14px", lineHeight: "1.45", fontFamily: "inherit" };
       const gridStep = Math.max(8, Math.round(20 * view.zoom));
       const selectedSet = React.useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
+      const pulseStyle = "@keyframes dsh-node-dots { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.2); } }";
 
       return jsxs("div", {
         style: { display: "flex", flexDirection: "column", height: "100%", width: "100%", overflow: "hidden", color: "var(--dsw-alias-label-primary, #e5e7eb)", background: "var(--dsw-alias-bg-base, #0f1117)" },
         children: [
+          jsx("style", { children: pulseStyle }),
           jsxs("div", {
             style: { display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderBottom: "1px solid var(--dsw-alias-border-l2, #30363d)", background: "var(--dsw-alias-bg-layer-2, #161b22)", flexWrap: "wrap" },
             children: [
               renamingBoard
                 ? jsx("input", { autoFocus: true, style: { ...inp, width: "175px", padding: "4px 7px", fontWeight: 600 }, value: activeBoard.name, onChange: (e) => updateActiveBoard({ name: e.target.value }), onBlur: () => setRenamingBoard(false), onKeyDown: (e) => { if (e.key === "Enter" || e.key === "Escape") setRenamingBoard(false); } })
-                : jsx("select", { style: { ...inp, width: "180px", padding: "4px 6px", fontWeight: 600 }, value: activeBoardId, onChange: (e) => { setActiveBoardId(e.target.value); setNodeStates({}); setSelectedSourceId(null); setSelectedNodeIds([]); historyRef.current = { past: [], future: [] }; }, children: boards.map((b) => jsx("option", { value: b.id, children: b.name }, b.id)) }),
+                : jsx("select", { style: { ...inp, width: "180px", padding: "4px 6px", fontWeight: 600 }, value: activeBoardId, onChange: (e) => { if (isRunning) stopGraph(); setActiveBoardId(e.target.value); setNodeStates({}); setSelectedSourceId(null); setSelectedNodeIds([]); lastOutputsRef.current.clear(); historyRef.current = { past: [], future: [] }; }, children: boards.map((b) => jsx("option", { value: b.id, children: b.name }, b.id)) }),
               jsx("button", { type: "button", style: btn, onClick: () => setRenamingBoard((v) => !v), children: t.rename }),
               jsx("button", { type: "button", style: { ...btn, background: "#1f6feb", borderColor: "#388bfd", color: "#fff" }, onClick: createNewBoard, children: t.newBoard }),
               boards.length > 1 ? jsx("button", { type: "button", style: { ...btn, color: "#f87171" }, onClick: deleteActiveBoard, children: t.delBoard }) : null,
@@ -863,7 +998,9 @@ window.__ModuleLoader__.load({
               jsx("datalist", { id: "dsh-ns-ws-list", children: workspaces.map((w) => jsx("option", { value: w.path, children: w.name }, w.path)) }),
               jsx("div", { style: { flex: 1 } }),
               jsx("span", { style: { fontSize: "12px", opacity: 0.8 }, children: status }),
-              jsx("button", { type: "button", onClick: runGraph, style: { ...btn, background: "#238636", borderColor: "#2ea043", color: "#fff", fontWeight: 600 }, children: t.runGraph })
+              isRunning
+                ? jsx("button", { type: "button", onClick: stopGraph, style: { ...btn, background: "#da3633", borderColor: "#f85149", color: "#fff", fontWeight: 600 }, children: "■ " + t.stopGraph })
+                : jsx("button", { type: "button", onClick: () => runGraph(null), style: { ...btn, background: "#238636", borderColor: "#2ea043", color: "#fff", fontWeight: 600 }, children: t.runGraph })
             ]
           }),
           jsxs("div", {
@@ -880,6 +1017,7 @@ window.__ModuleLoader__.load({
                   nodes.map((node) => {
                     const st = nodeStates[node.id];
                     const isSelected = selectedSet.has(node.id);
+                    const isCollapsed = Boolean(node.collapsed);
                     const bc = st === "running"
                       ? "#f59e0b"
                       : st === "done"
@@ -895,25 +1033,53 @@ window.__ModuleLoader__.load({
                     const sel = node.provider && node.model ? node.provider + "::" + node.model : "";
                     const inCount = edges.filter((e) => e.to === node.id).length;
                     const isSourceOnly = node.type === "input" || node.type === "file";
+                    const nodeWidth = isCollapsed ? 250 : (node.w || (node.type === "output" ? 420 : 320));
                     return jsxs("div", {
                       "data-ns-node": node.id,
                       onMouseDown: (e) => handleNodeMouseDown(e, node),
-                      style: { position: "absolute", left: node.x + "px", top: node.y + "px", width: (node.w || (node.type === "output" ? 420 : 320)) + "px", minWidth: "280px", minHeight: "170px", height: node.h ? node.h + "px" : "auto", display: "flex", flexDirection: "column", background: "var(--dsw-alias-bg-layer-2, #161b22)", border: "1.5px solid " + bc, borderRadius: "10px", boxShadow: shadow, cursor: "default" },
+                      style: { position: "absolute", left: node.x + "px", top: node.y + "px", width: nodeWidth + "px", minWidth: isCollapsed ? "220px" : "280px", minHeight: isCollapsed ? "auto" : "170px", height: isCollapsed ? "auto" : (node.h ? node.h + "px" : "auto"), display: "flex", flexDirection: "column", background: "var(--dsw-alias-bg-layer-2, #161b22)", border: "1.5px solid " + bc, borderRadius: "10px", boxShadow: shadow, cursor: "default" },
                       children: [
                         !isSourceOnly ? jsx("div", { "data-port-in": node.id, title: "Вход (" + inCount + ")", onClick: (e) => { e.stopPropagation(); if (selectedSourceId && selectedSourceId !== node.id) { pushHistory(); setEdges((prev) => prev.some((ed) => ed.from === selectedSourceId && ed.to === node.id) ? prev : [...prev, { from: selectedSourceId, to: node.id }]); setSelectedSourceId(null); } }, style: { position: "absolute", left: "-8px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", borderRadius: "50%", background: "#10b981", border: "2px solid #0f1117", cursor: "crosshair" } }) : null,
                         node.type !== "output" ? jsx("div", { "data-port-out": node.id, title: "Выход", onClick: (e) => { e.stopPropagation(); setSelectedSourceId((cur) => (cur === node.id ? null : node.id)); }, style: { position: "absolute", right: "-8px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", borderRadius: "50%", background: "#3b82f6", border: "2px solid #0f1117", outline: selectedSourceId === node.id ? "3px solid #f59e0b" : "none", cursor: "crosshair" } }) : null,
                         jsxs("div", {
                           onMouseDown: (e) => startDrag(e, node),
                           onDoubleClick: () => setEditingTitleId(node.id),
-                          style: { padding: "8px 12px", borderBottom: "1px solid var(--dsw-alias-border-l2, #30363d)", fontSize: "13px", fontWeight: 600, cursor: "grab", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px", background: isSelected ? "rgba(59,130,246,0.12)" : "transparent", borderRadius: "8px 8px 0 0" },
+                          style: { padding: "8px 12px", borderBottom: isCollapsed ? "none" : "1px solid var(--dsw-alias-border-l2, #30363d)", fontSize: "13px", fontWeight: 600, cursor: "grab", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px", background: isSelected ? "rgba(59,130,246,0.12)" : "transparent", borderRadius: isCollapsed ? "8px" : "8px 8px 0 0" },
                           children: [
+                            jsx("button", { type: "button", title: t.collapseTip, onClick: (e) => { e.stopPropagation(); updateNode(node.id, { collapsed: !isCollapsed }); setTimeout(() => forceTick((v) => v + 1), 0); }, style: { background: "none", border: "none", color: "inherit", cursor: "pointer", padding: "0 2px", fontSize: "11px", opacity: 0.75 }, children: isCollapsed ? "▶" : "▼" }),
                             editingTitleId === node.id
                               ? jsx("input", { autoFocus: true, style: { ...inp, padding: "2px 6px", fontWeight: 600 }, value: node.title, onChange: (e) => updateNode(node.id, { title: e.target.value }), onBlur: () => setEditingTitleId(null), onKeyDown: (e) => { if (e.key === "Enter") setEditingTitleId(null); } })
-                              : jsx("span", { children: node.title + (inCount > 1 ? " (" + inCount + " вх.)" : "") }),
-                            jsx("button", { type: "button", onClick: () => deleteNode(node.id), style: { background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7 }, children: "X" })
+                              : jsx("span", { style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: node.title + (inCount > 1 ? " (" + inCount + " вх.)" : "") }),
+                            jsxs("div", {
+                              style: { display: "flex", alignItems: "center", gap: "6px" },
+                              children: [
+                                isCollapsed && node.type === "llm" && st === "running" ? jsx("div", {
+                                  style: { display: "flex", gap: "3px", alignItems: "center", marginRight: "2px" },
+                                  children: Array.from({ length: 4 }, (_, idx) =>
+                                    jsx("span", {
+                                      style: {
+                                        width: "5px",
+                                        height: "5px",
+                                        borderRadius: "50%",
+                                        backgroundColor: "#a3e635",
+                                        display: "inline-block",
+                                        animation: "dsh-node-dots 1.4s infinite ease-in-out both",
+                                        animationDelay: (idx * 0.16) + "s"
+                                      }
+                                    }, idx)
+                                  )
+                                }) : null,
+                                node.type === "llm" ? (
+                                  st === "running"
+                                    ? jsx("button", { type: "button", title: t.stopNodeTip, onClick: (e) => { e.stopPropagation(); stopGraph(); }, style: { background: "rgba(248, 81, 73, 0.16)", border: "1px solid rgba(248, 81, 73, 0.5)", color: "#f85149", borderRadius: "5px", padding: "1px 6px", fontSize: "11px", lineHeight: "1.3", cursor: "pointer" }, children: "■" })
+                                    : jsx("button", { type: "button", title: t.runNodeTip, onClick: (e) => { e.stopPropagation(); runGraph(node.id); }, style: { background: "rgba(46, 160, 67, 0.16)", border: "1px solid rgba(46, 160, 67, 0.5)", color: "#4ade80", borderRadius: "5px", padding: "1px 6px", fontSize: "11px", lineHeight: "1.3", cursor: "pointer" }, children: "▶" })
+                                ) : null,
+                                jsx("button", { type: "button", onClick: () => deleteNode(node.id), style: { background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7 }, children: "X" })
+                              ]
+                            })
                           ]
                         }),
-                        jsxs("div", {
+                        !isCollapsed ? jsxs("div", {
                           style: { padding: "10px", display: "flex", flexDirection: "column", gap: "8px", fontSize: "13px", flex: 1, minHeight: 0 },
                           children: [
                             node.type === "input" ? jsx("textarea", { rows: 4, style: { ...inp, flex: 1, minHeight: "85px", resize: "none" }, value: node.text || "", placeholder: t.inputPh, onChange: (e) => updateNode(node.id, { text: e.target.value }) }) : null,
@@ -931,7 +1097,28 @@ window.__ModuleLoader__.load({
                             }) : null,
                             node.type === "llm" ? jsxs(React.Fragment, {
                               children: [
-                                jsx("label", { style: { opacity: 0.75 }, children: t.providerModel }),
+                                jsxs("div", {
+                                  style: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+                                  children: [
+                                    jsx("label", { style: { opacity: 0.75 }, children: t.providerModel }),
+                                    st === "running" ? jsx("div", {
+                                      style: { display: "flex", gap: "5px", alignItems: "center", paddingRight: "4px" },
+                                      children: Array.from({ length: 5 }, (_, idx) =>
+                                        jsx("span", {
+                                          style: {
+                                            width: "6px",
+                                            height: "6px",
+                                            borderRadius: "50%",
+                                            backgroundColor: "#a3e635",
+                                            display: "inline-block",
+                                            animation: "dsh-node-dots 1.4s infinite ease-in-out both",
+                                            animationDelay: (idx * 0.16) + "s"
+                                          }
+                                        }, idx)
+                                      )
+                                    }) : null
+                                  ]
+                                }),
                                 jsx("select", { style: inp, value: sel, onChange: (e) => { const p = e.target.value.split("::"); updateNode(node.id, { provider: p.at(0), model: p.at(1) }); }, children: groupedModels.length === 0 ? jsx("option", { value: "", children: "Нет моделей" }) : groupedModels.map(([g, items]) => jsx("optgroup", { label: g, children: items.map((m) => { const v = m.provider + "::" + m.id; return jsx("option", { value: v, children: m.name + " (" + m.id + ")" }, v); }) }, g)) }),
                                 jsxs("div", {
                                   style: { display: "flex", alignItems: "center", gap: "8px" },
@@ -949,17 +1136,35 @@ window.__ModuleLoader__.load({
                                 jsx("textarea", { rows: 3, style: { ...inp, flex: 1, minHeight: "75px", resize: "none" }, value: node.systemPrompt || "", placeholder: t.sysPromptPh, onChange: (e) => updateNode(node.id, { systemPrompt: e.target.value }) })
                               ]
                             }) : null,
-                            node.type === "output" ? jsxs(React.Fragment, {
-                              children: [
-                                jsx("textarea", { rows: 6, style: { ...inp, flex: 1, minHeight: "130px", resize: "none" }, value: node.text || "", placeholder: t.outputPh, onChange: (e) => updateNode(node.id, { text: e.target.value }) }),
-                                jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", opacity: 0.9 }, children: [jsx("input", { type: "checkbox", checked: Boolean(node.saveMd), onChange: (e) => updateNode(node.id, { saveMd: e.target.checked }) }), jsx("span", { children: t.saveMdChk })] }),
-                                node.saveMd ? jsx("input", { style: { ...inp, padding: "4px 7px" }, value: node.fileName || "", placeholder: t.fileNamePh, onChange: (e) => updateNode(node.id, { fileName: e.target.value }) }) : null,
-                                jsxs("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" }, children: [jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => saveNodeToMd(node), children: t.saveMdBtn }), jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => sendToNewSession(node), children: t.newSessionBtn })] })
-                              ]
-                            }) : null
+                            node.type === "output" ? (() => {
+                              const outTxt = node.text || "";
+                              const charCount = outTxt.length;
+                              const wordCount = outTxt.trim() ? outTxt.trim().split(/\s+/).length : 0;
+                              const isCopied = copiedNodeId === node.id;
+                              return jsxs(React.Fragment, {
+                                children: [
+                                  jsxs("div", {
+                                    style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px" },
+                                    children: [
+                                      jsx("span", { style: { fontSize: "12px", opacity: 0.75 }, children: charCount + " " + t.charsLabel + " · " + wordCount + " " + t.wordsLabel }),
+                                      jsx("button", {
+                                        type: "button",
+                                        style: { ...btn, padding: "2px 8px", fontSize: "11px", color: isCopied ? "#4ade80" : "inherit", borderColor: isCopied ? "#2ea043" : "var(--dsw-alias-border-l2, #30363d)" },
+                                        onClick: () => copyNodeText(node),
+                                        children: isCopied ? t.copiedBtn : t.copyBtn
+                                      })
+                                    ]
+                                  }),
+                                  jsx("textarea", { rows: 6, style: { ...inp, flex: 1, minHeight: "130px", resize: "none" }, value: outTxt, placeholder: t.outputPh, onChange: (e) => updateNode(node.id, { text: e.target.value }) }),
+                                  jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", opacity: 0.9 }, children: [jsx("input", { type: "checkbox", checked: Boolean(node.saveMd), onChange: (e) => updateNode(node.id, { saveMd: e.target.checked }) }), jsx("span", { children: t.saveMdChk })] }),
+                                  node.saveMd ? jsx("input", { style: { ...inp, padding: "4px 7px" }, value: node.fileName || "", placeholder: t.fileNamePh, onChange: (e) => updateNode(node.id, { fileName: e.target.value }) }) : null,
+                                  jsxs("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" }, children: [jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => saveNodeToMd(node), children: t.saveMdBtn }), jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => sendToNewSession(node), children: t.newSessionBtn })] })
+                                ]
+                              });
+                            })() : null
                           ]
-                        }),
-                        jsx("div", { onMouseDown: (e) => startResize(e, node), title: "Потяните за уголок", style: { position: "absolute", right: "0px", bottom: "0px", width: "18px", height: "18px", cursor: "nwse-resize", background: "linear-gradient(135deg, transparent 50%, #3b82f6 50%)", borderRadius: "0 0 9px 0", zIndex: 10 } })
+                        }) : null,
+                        !isCollapsed ? jsx("div", { onMouseDown: (e) => startResize(e, node), title: "Потяните за уголок", style: { position: "absolute", right: "0px", bottom: "0px", width: "18px", height: "18px", cursor: "nwse-resize", background: "linear-gradient(135deg, transparent 50%, #3b82f6 50%)", borderRadius: "0 0 9px 0", zIndex: 10 } }) : null
                       ]
                     }, node.id);
                   })
