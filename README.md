@@ -35,11 +35,10 @@ A visual node-based workflow editor plugin for **DeepSeek Harness (DSH)** to bui
 3. Link or register the plugin in your **DeepSeek Harness** instance (via `cordis.patch.yml` or DSH Plugin Manager) and restart DSH.
 4. Open **Node Studio** from the left sidebar navigation panel.
 
-5. ## API Keys Configuration
+5.## API Keys Configuration
 
 The plugin automatically reads provider aseURL and API keys from your DSH profile (cordis.patch.yml and environment variables).  
 If your provider key is stored in the OS keychain and not exposed to environment variables, copy keys.example.json to keys.json in the plugin folder and fill in your keys:
-
 
 `json
 {
@@ -47,8 +46,7 @@ If your provider key is stored in the OS keychain and not exposed to environment
   "openrouter": "sk-or-..."
 }
 `
-
-
+*(Note: keys.json is listed in .gitignore so your keys stay local).*
 ## Usage & Controls
 
 - **Connect Nodes**: Click the blue output port on the right side of a source node, then click the green input port on the left side of a target node.
