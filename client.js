@@ -823,13 +823,11 @@ window.__ModuleLoader__.load({
         let targetSet = null;
         if (startNodeId) {
           targetSet = new Set([startNodeId]);
-          let added = true;
-          while (added) {
-            added = false;
-            for (const ed of edges) {
-              if (targetSet.has(ed.from) && !targetSet.has(ed.to)) {
+          for (const ed of edges) {
+            if (ed.from === startNodeId) {
+              const targetNode = nodeMap.get(ed.to);
+              if (targetNode && targetNode.type === "output") {
                 targetSet.add(ed.to);
-                added = true;
               }
             }
           }
@@ -854,6 +852,14 @@ window.__ModuleLoader__.load({
               const txt = n.text || "";
               values.set(n.id, txt);
               lastOutputsRef.current.set(n.id, txt);
+            } else if (n.type === "output") {
+              const hasIncoming = edges.some((ed) => ed.to === n.id);
+              const isUpstreamOfStart = targetSet && !targetSet.has(n.id);
+              if (!hasIncoming || isUpstreamOfStart) {
+                const txt = n.text || "";
+                values.set(n.id, txt);
+                lastOutputsRef.current.set(n.id, txt);
+              }
             } else if (n.type === "file") {
               if (targetSet && !targetSet.has(n.id) && values.has(n.id)) continue;
               if (!n.filePath) {
@@ -1040,7 +1046,7 @@ window.__ModuleLoader__.load({
                       style: { position: "absolute", left: node.x + "px", top: node.y + "px", width: nodeWidth + "px", minWidth: isCollapsed ? "220px" : "280px", minHeight: isCollapsed ? "auto" : "170px", height: isCollapsed ? "auto" : (node.h ? node.h + "px" : "auto"), display: "flex", flexDirection: "column", background: "var(--dsw-alias-bg-layer-2, #161b22)", border: "1.5px solid " + bc, borderRadius: "10px", boxShadow: shadow, cursor: "default" },
                       children: [
                         !isSourceOnly ? jsx("div", { "data-port-in": node.id, title: "Вход (" + inCount + ")", onClick: (e) => { e.stopPropagation(); if (selectedSourceId && selectedSourceId !== node.id) { pushHistory(); setEdges((prev) => prev.some((ed) => ed.from === selectedSourceId && ed.to === node.id) ? prev : [...prev, { from: selectedSourceId, to: node.id }]); setSelectedSourceId(null); } }, style: { position: "absolute", left: "-8px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", borderRadius: "50%", background: "#10b981", border: "2px solid #0f1117", cursor: "crosshair" } }) : null,
-                        node.type !== "output" ? jsx("div", { "data-port-out": node.id, title: "Выход", onClick: (e) => { e.stopPropagation(); setSelectedSourceId((cur) => (cur === node.id ? null : node.id)); }, style: { position: "absolute", right: "-8px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", borderRadius: "50%", background: "#3b82f6", border: "2px solid #0f1117", outline: selectedSourceId === node.id ? "3px solid #f59e0b" : "none", cursor: "crosshair" } }) : null,
+                        jsx("div", { "data-port-out": node.id, title: "Выход", onClick: (e) => { e.stopPropagation(); setSelectedSourceId((cur) => (cur === node.id ? null : node.id)); }, style: { position: "absolute", right: "-8px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", borderRadius: "50%", background: "#3b82f6", border: "2px solid #0f1117", outline: selectedSourceId === node.id ? "3px solid #f59e0b" : "none", cursor: "crosshair" } }),
                         jsxs("div", {
                           onMouseDown: (e) => startDrag(e, node),
                           onDoubleClick: () => setEditingTitleId(node.id),
@@ -1155,7 +1161,7 @@ window.__ModuleLoader__.load({
                                       })
                                     ]
                                   }),
-                                  jsx("textarea", { rows: 6, style: { ...inp, flex: 1, minHeight: "130px", resize: "none" }, value: outTxt, placeholder: t.outputPh, onChange: (e) => updateNode(node.id, { text: e.target.value }) }),
+                                  jsx("textarea", { rows: 6, style: { ...inp, flex: 1, minHeight: "130px", resize: "none" }, value: outTxt, placeholder: t.outputPh, onChange: (e) => { const v = e.target.value; updateNode(node.id, { text: v }); lastOutputsRef.current.set(node.id, v); } }),
                                   jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", opacity: 0.9 }, children: [jsx("input", { type: "checkbox", checked: Boolean(node.saveMd), onChange: (e) => updateNode(node.id, { saveMd: e.target.checked }) }), jsx("span", { children: t.saveMdChk })] }),
                                   node.saveMd ? jsx("input", { style: { ...inp, padding: "4px 7px" }, value: node.fileName || "", placeholder: t.fileNamePh, onChange: (e) => updateNode(node.id, { fileName: e.target.value }) }) : null,
                                   jsxs("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" }, children: [jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => saveNodeToMd(node), children: t.saveMdBtn }), jsx("button", { type: "button", style: { ...btn, flex: 1 }, onClick: () => sendToNewSession(node), children: t.newSessionBtn })] })
