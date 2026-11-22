@@ -6,51 +6,42 @@ A visual node-based workflow editor plugin for **DeepSeek Harness (DSH)** to bui
 <img width="1340" height="898" alt="image" src="https://github.com/user-attachments/assets/499f5545-c05c-44fc-8c71-63f7b07fc49c" />
 
 
+
 ## Key Features
 
-- **Multi-Input & Sequential Agent Chains**: Connect input nodes, project files, and upstream LLM agents; downstream agents wait for upstream completion.
-- **Auto-Discovery & Controls**: Automatically loads models from your DSH profile with per-node system prompts and temperature settings (`0.0 – 1.8`).
-- **File & Output Integration**: Read workspace files (`.md`, `.txt`, `.json`, `.yaml`) via `+ File` and save or export results via `+ Output`.
-- **Canvas & Localization**: Infinite canvas with pan/zoom/resize, multi-board support, and native localization (**English**, **Русский**, **简体中文**).
+- **Multi-Project Workspaces**: Create, rename, switch between, and delete independent mini-project boards (`Мини-проект 1`, `2`, etc.) with automatic persistence to both local storage and disk.
+- **Four Node Types**:
+  - **Input (`+ Ввод`)**: Direct text input nodes for prompts, world-building notes, or data snippets.
+  - **Project File (`+ Файл`)**: Read local `.md`, `.txt`, `.json`, `.js`, `.py`, and other text files directly from your project folder with a one-click refresh button (`Обн.`).
+  - **LLM Agent (`+ LLM`)**: Connect any configured provider and model in DSH, adjust temperature (`0.0` – `1.8`), and define custom system prompts.
+  - **Pass-Through Output (`+ Вывод`)**: Combine results from one or multiple upstream nodes, edit generated drafts manually mid-pipeline via its output port (Human-in-the-Loop), view live character/word counts, copy text with one click, auto-save to `.md` files, or send outputs directly to a new DSH chat session.
+- **Built-in & Custom Skills Library**: Choose from 5 built-in role presets directly inside any LLM node, save your own system prompts as reusable skills (`+`), delete custom presets, or export/import skills as `.json` and `.md` files.
+- **Graph Export & Import (`.json`)**: Export any board—including all nodes, connections, model settings, prompts, and viewport state—to a portable `.json` file, and import saved graphs back as new boards with one click.
+- **Interactive Canvas & Controls**:
+  - Smooth pan (`Space + Drag` or middle-click drag) and zoom (`Mouse Wheel` centered on cursor).
+  - Multi-node box selection (`Left-click drag` on canvas) and `Ctrl/Shift + Click` toggling.
+  - Full keyboard shortcuts: `Ctrl+C` / `Ctrl+V` (copy/paste nodes with internal connections), `Ctrl+A` (select all), `Ctrl+Z` / `Ctrl+Y` (undo/redo history), `Delete` / `Backspace` (remove selected), and `Esc` (clear selection).
+  - Resizable node cards (drag the bottom-right corner handle), collapsible node bars (`▼` / `▶`), and editable node titles (`Double-click` on header).
+- **Flexible Execution & Abort Controls**: Run the entire pipeline (`Run Graph`), run an individual LLM node and its directly connected output (`▶` in node header) without auto-triggering downstream agents, or halt execution at any moment (`Stop` / `■`).
+- **Multilingual UI**: Automatically adapts to Russian, English, and Chinese based on your DSH locale.
 
-## Quick Installation
+## Installation
 
-1. Place the plugin files into a local directory (e.g. `~/plugins/dsh-node-studio`).
-2. Register the plugin in your DSH profile (`~/.dsh/profiles/desktop/package.json`):
-```json
-{
-  "dependencies": {
-    "dsh-node-studio": "link:/path/to/dsh-node-studio"
-  },
-  "dsh": { "profile": { "bundles": ["dsh-node-studio"] } }
-}
-```
-3. Restart **DeepSeek Harness** to access **Node Studio** in the sidebar.
-
-## API Keys & Configuration
-
-The plugin reads keys and `baseURL` from your DSH profile. For keys stored outside environment variables, copy `keys.example.json` to `keys.json` in the plugin directory:
-```json
-{
-  "gptunnel": "sk-...",
-  "openrouter": "sk-or-..."
-}
-```
+1. Clone or download this repository into a local folder (e.g., `dsh-node-studio`).
+2. Install dependencies inside the plugin directory:
+   ```bash
+   npm install
+   ```
+3. Link or register the plugin in your **DeepSeek Harness** instance (via `cordis.patch.yml` or DSH Plugin Manager) and restart DSH.
+4. Open **Node Studio** from the left sidebar navigation panel.
 
 ## Usage & Controls
 
-- **Select Nodes**: Left-click a node to select it, `Shift/Ctrl + Click` to toggle multiple nodes, or drag a selection box with the left mouse button on empty canvas space (`Ctrl+A` to select all).
-- **Connect & Disconnect Nodes**: Click the blue output port on a source node and then the green input port on the target node. Left-click on any blue wire to delete it.
-- **Move & Resize Nodes**: Drag any node (or a group of selected nodes) by its header, or use the handle at the bottom-right corner to resize.
-- **Rename a Node**: Double-click the node title in its header.
-- **Duplicate & Delete**: Press `Ctrl+C` / `Ctrl+V` to copy and paste selected nodes along with their internal connections, or `Delete` / `Backspace` to remove them.
-- **Undo / Redo**: Press `Ctrl+Z` to undo and `Ctrl+Shift+Z` (or `Ctrl+Y`) to redo canvas changes.
-- **Canvas Navigation**: Hold the middle mouse button (or `Space + Left Drag`) to pan and use the mouse wheel to zoom.
-- 
-- **Per-Node Execution & Abort Controls**: Run or stop individual LLM nodes (and their downstream chains) with `▶` / `■` buttons right in the node header, or use the global **Stop** button to halt execution at any time.
-- **Collapsible Nodes**: Collapse any node into a compact bar (`▼` / `▶`) while keeping ports connected and live progress dots visible.
-- **Output Utilities**: Added a live character and word counter alongside a one-click **Copy** button in output nodes.
-
+- **Connect Nodes**: Click the blue output port on the right side of a source node, then click the green input port on the left side of a target node.
+- **Disconnect Nodes**: Click directly on any connecting curve to remove it.
+- **Human-in-the-Loop Editing**: Place an `Output` node between two LLM agents, click `▶` on the first LLM node, edit the resulting text inside the `Output` node, and click `▶` on the next LLM node to continue.
+- **Skills & Presets**: Use the dropdown above `System Prompt` in any LLM node to apply a preset, `+` to save the current prompt as a custom skill, and `Exp` / `Imp` to share or load `.skill.json` and `.md` files.
+- **Backup & Share Boards**: Click `Export` in the top toolbar to download the current board as a `.json` file, or `Import` to load a saved graph as a new project tab.
 
 ## License
 
