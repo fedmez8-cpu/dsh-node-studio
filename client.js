@@ -12,38 +12,59 @@ window.__ModuleLoader__.load({
     const PANEL_ORDER = 35;
     const STORAGE_KEY = "dsh-node-studio-boards-v2";
         const SKILLS_STORAGE_KEY = "dsh-node-studio-skills-v1";
-    const BUILTIN_SKILLS = [
+        const BUILTIN_SKILLS = [
       {
         id: "builtin-editor",
-        name: "Литературный редактор",
         builtin: true,
-        prompt: "Ты опытный литературный редактор. Убери канцелярит, штампы и воду. Сделай ритм фраз живым, сохрани авторский голос и подтекст. Сначала дай отредактированный текст, затем кратко перечисли ключевые правки."
+        name: { ru: "Литературный редактор", en: "Literary Editor", zh: "文学编辑" },
+        prompt: {
+          ru: "Ты опытный литературный редактор. Убери канцелярит, штампы и воду. Сделай ритм фраз живым, сохрани авторский голос и подтекст. Сначала дай отредактированный текст, затем кратко перечисли ключевые правки.",
+          en: "You are an experienced literary editor. Remove clichés, bureaucratese, and fluff. Make the pacing lively while preserving the author's voice and subtext. Provide the edited text first, followed by a brief list of key changes.",
+          zh: "你是一位经验丰富的文学编辑。去除陈词滥调、套话和冗长表达，让语言节奏更生动，同时保留作者的风格和潜台词。先给出修改后的文本，再简要列出主要修改点。"
+        }
       },
       {
         id: "builtin-screenwriter",
-        name: "Сценарист / Драматург",
         builtin: true,
-        prompt: "Ты профессиональный сценарист. Выстраивай сцену через действие, конфликт и подтекст в диалогах. Покажи эмоции через поведение персонажей, а не прямые объяснения. Держи высокий темп повествования."
+        name: { ru: "Сценарист / Драматург", en: "Screenwriter / Dramatist", zh: "编剧 / 戏剧作家" },
+        prompt: {
+          ru: "Ты профессиональный сценарист. Выстраивай сцену через действие, конфликт и подтекст в диалогах. Покажи эмоции через поведение персонажей, а не прямые объяснения. Держи высокий темп повествования.",
+          en: "You are a professional screenwriter. Build scenes through action, conflict, and subtext in dialogue. Show emotions through character behavior rather than direct exposition. Maintain strong narrative pacing.",
+          zh: "你是一名专业编剧。通过动作、冲突和对话中的潜台词来构建场景。用角色的行为展现情感，而不是直接说明。保持紧凑的叙事节奏。"
+        }
       },
       {
         id: "builtin-critic",
-        name: "Критик и бета-ридер",
         builtin: true,
-        prompt: "Ты вдумчивый бета-ридер и критик. Оцени текст по критериям: логика, мотивация героев, темп, вовлечённость и слабые места. Будь конструктивен, приводи конкретные примеры из текста и предлагай варианты улучшения."
+        name: { ru: "Критик и бета-ридер", en: "Critic & Beta Reader", zh: "评论家与试读者" },
+        prompt: {
+          ru: "Ты вдумчивый бета-ридер и критик. Оцени текст по критериям: логика, мотивация героев, темп, вовлечённость и слабые места. Будь конструктивен, приводи конкретные примеры из текста и предлагай варианты улучшения.",
+          en: "You are a thoughtful beta reader and critic. Evaluate the text based on logic, character motivation, pacing, engagement, and weak spots. Be constructive, cite specific examples from the text, and suggest improvements.",
+          zh: "你是一位深思熟虑的试读者和评论家。从逻辑、角色动机、节奏、吸引力和薄弱环节等方面评估文本。提出建设性意见，引用文中的具体例子并给出改进建议。"
+        }
       },
       {
         id: "builtin-analyst",
-        name: "Структурный аналитик",
         builtin: true,
-        prompt: "Проанализируй входные данные, выдели главные тезисы, скрытые противоречия и причинно-следственные связи. Оформи ответ в виде чёткой структурированной выжимки с выводами."
+        name: { ru: "Структурный аналитик", en: "Structural Analyst", zh: "结构分析师" },
+        prompt: {
+          ru: "Проанализируй входные данные, выдели главные тезисы, скрытые противоречия и причинно-следственные связи. Оформи ответ в виде чёткой структурированной выжимки с выводами.",
+          en: "Analyze the input data, highlight key theses, hidden contradictions, and cause-and-effect relationships. Format your response as a clear, structured summary with actionable conclusions.",
+          zh: "分析输入数据，提炼核心论点、潜在矛盾和因果关系。以清晰的结构化摘要形式呈现结果并给出结论。"
+        }
       },
       {
         id: "builtin-stylist",
-        name: "Стилист и адаптер",
         builtin: true,
-        prompt: "Перепиши переданный текст, усилив образность, точность глаголов и выразительность деталей, не искажая исходный сюжет и факты."
+        name: { ru: "Стилист и адаптер", en: "Stylist & Adapter", zh: "文风润色师" },
+        prompt: {
+          ru: "Перепиши переданный текст, усилив образность, точность глаголов и выразительность деталей, не искажая исходный сюжет и факты.",
+          en: "Rewrite the provided text, enhancing imagery, verb precision, and expressive details without distorting the original plot or facts.",
+          zh: "重写所提供的文本，增强画面感、动词准确性和细节表现力，同时不歪曲原有情节和事实。"
+        }
       }
     ];
+
 
     function loadCustomSkills() {
       try {
@@ -153,6 +174,11 @@ window.__ModuleLoader__.load({
         temp: "Температура: ",
         sysPrompt: "Системный промпт:",
         sysPromptPh: "Роль или правила...",
+        skillSelectPh: "-- Скилл / Пресет --",
+        skillSaveTip: "Сохранить текущий промпт как скилл",
+        skillExpTip: "Экспортировать скилл в файл",
+        skillImpTip: "Импортировать скилл (.json или .md)",
+        skillDelTip: "Удалить выбранный скилл",
         inputPh: "Введите текст...",
         selectFile: "-- Выберите файл --",
         refreshBtn: "Обн.",
@@ -197,6 +223,11 @@ window.__ModuleLoader__.load({
         temp: "Temperature: ",
         sysPrompt: "System Prompt:",
         sysPromptPh: "Role or instructions...",
+                skillSelectPh: "-- Skill / Preset --",
+        skillSaveTip: "Save current prompt as a skill",
+        skillExpTip: "Export skill to file",
+        skillImpTip: "Import skill (.json or .md)",
+        skillDelTip: "Delete selected skill",
         inputPh: "Enter text...",
         selectFile: "-- Select file --",
         refreshBtn: "Ref.",
@@ -241,6 +272,11 @@ window.__ModuleLoader__.load({
         temp: "温度 (Temperature): ",
         sysPrompt: "系统提示词:",
         sysPromptPh: "角色设定或规则...",
+        skillSelectPh: "-- 技能 / 预设 --",
+        skillSaveTip: "将当前提示词保存为技能",
+        skillExpTip: "导出技能文件",
+        skillImpTip: "导入技能 (.json 或 .md)",
+        skillDelTip: "删除所选技能",
         inputPh: "输入文本...",
         selectFile: "-- 选择文件 --",
         refreshBtn: "刷新",
@@ -305,8 +341,15 @@ window.__ModuleLoader__.load({
       const fileInputRef = React.useRef(null);
             const skillInputRef = React.useRef(null);
       const [customSkills, setCustomSkills] = React.useState(() => loadCustomSkills());
-      const allSkills = React.useMemo(() => [...BUILTIN_SKILLS, ...customSkills], [customSkills]);
-
+      const allSkills = React.useMemo(() => {
+        const localizedBuiltins = BUILTIN_SKILLS.map((s) => ({
+          id: s.id,
+          builtin: true,
+          name: (s.name && (s.name[lang] || s.name.en)) || "",
+          prompt: (s.prompt && (s.prompt[lang] || s.prompt.en)) || ""
+        }));
+        return [...localizedBuiltins, ...customSkills];
+      }, [customSkills, lang]);
       React.useEffect(() => {
         try { localStorage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(customSkills)); } catch {}
       }, [customSkills]);
@@ -1342,16 +1385,16 @@ window.__ModuleLoader__.load({
                                           updateNode(node.id, { skillId: "" });
                                         }
                                       },
-                                      children: [
-                                        jsx("option", { value: "", children: "-- Скилл / Пресет --" }),
+                                                                            children: [
+                                        jsx("option", { value: "", children: t.skillSelectPh }),
                                         allSkills.map((s) => jsx("option", { value: s.id, children: (s.builtin ? "★ " : "") + s.name }, s.id))
                                       ]
                                     }),
-                                    jsx("button", { type: "button", title: "Сохранить текущий промпт как скилл", style: { ...btn, padding: "3px 6px", fontSize: "11px" }, onClick: () => savePromptAsSkill(node), children: "+" }),
-                                    jsx("button", { type: "button", title: "Экспортировать скилл в файл", style: { ...btn, padding: "3px 6px", fontSize: "11px" }, onClick: () => exportSkill(node), children: "Exp" }),
-                                    jsx("button", { type: "button", title: "Импортировать скилл (.json или .md)", style: { ...btn, padding: "3px 6px", fontSize: "11px" }, onClick: () => { if (skillInputRef.current) { skillInputRef.current.dataset.targetNode = node.id; skillInputRef.current.value = ""; skillInputRef.current.click(); } }, children: "Imp" }),
+                                    jsx("button", { type: "button", title: t.skillSaveTip, style: { ...btn, padding: "3px 6px", fontSize: "11px" }, onClick: () => savePromptAsSkill(node), children: "+" }),
+                                    jsx("button", { type: "button", title: t.skillExpTip, style: { ...btn, padding: "3px 6px", fontSize: "11px" }, onClick: () => exportSkill(node), children: "Exp" }),
+                                    jsx("button", { type: "button", title: t.skillImpTip, style: { ...btn, padding: "3px 6px", fontSize: "11px" }, onClick: () => { if (skillInputRef.current) { skillInputRef.current.dataset.targetNode = node.id; skillInputRef.current.value = ""; skillInputRef.current.click(); } }, children: "Imp" }),
                                     customSkills.some((s) => s.id === node.skillId)
-                                      ? jsx("button", { type: "button", title: "Удалить выбранный скилл", style: { ...btn, padding: "3px 6px", fontSize: "11px", color: "#f87171" }, onClick: () => deleteCustomSkill(node.skillId), children: "×" })
+                                      ? jsx("button", { type: "button", title: t.skillDelTip, style: { ...btn, padding: "3px 6px", fontSize: "11px", color: "#f87171" }, onClick: () => deleteCustomSkill(node.skillId), children: "×" })
                                       : null
                                   ]
                                 }),
