@@ -85,6 +85,8 @@ window.__ModuleLoader__.load({
         rename: "Имя",
         newBoard: "+ Новый проект",
         delBoard: "Удалить",
+        exportBoard: "Экспорт",
+        importBoard: "Импорт",
         addInput: "+ Ввод",
         addFile: "+ Файл",
         addLlm: "+ LLM",
@@ -127,6 +129,8 @@ window.__ModuleLoader__.load({
         rename: "Rename",
         newBoard: "+ New Board",
         delBoard: "Delete",
+        exportBoard: "Export",
+        importBoard: "Import",
         addInput: "+ Input",
         addFile: "+ File",
         addLlm: "+ LLM",
@@ -169,6 +173,8 @@ window.__ModuleLoader__.load({
         rename: "重命名",
         newBoard: "+ 新建项目",
         delBoard: "删除",
+        exportBoard: "导出",
+        importBoard: "导入",
         addInput: "+ 输入",
         addFile: "+ 文件",
         addLlm: "+ 模型",
@@ -253,6 +259,7 @@ window.__ModuleLoader__.load({
       const view = activeBoard.view || { x: 0, y: 0, zoom: 1 };
       const projectDir = activeBoard.projectDir || "";
       const canvasRef = React.useRef(null);
+      const fileInputRef = React.useRef(null);
       const viewRef = React.useRef(view);
       viewRef.current = view;
       const nodesRef = React.useRef(nodes);
@@ -498,6 +505,65 @@ window.__ModuleLoader__.load({
         setSelectedNodeIds([]);
         lastOutputsRef.current.clear();
         historyRef.current = { past: [], future: [] };
+      };
+      const exportActiveBoard = () => {
+        const data = {
+          format: "dsh-node-studio-board",
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          board: activeBoard
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const safeName = (activeBoard.name || "board").replace(/[\\/:*?"<>|]+/g, "_");
+        a.href = url;
+        a.download = safeName + ".json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setStatus("Экспортировано: " + safeName + ".json");
+      };
+
+            const importBoardFromFile = (e) => {
+        const file = Array.from((e.target && e.target.files) || []).at(0);
+        if (!file) return;
+        setStatus("Читаю файл: " + file.name);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const parsed = JSON.parse(String(ev.target.result || "{}"));
+            const srcBoard = parsed.board || (Array.isArray(parsed.boards) ? parsed.boards.at(0) : parsed);
+            if (!srcBoard || !Array.isArray(srcBoard.nodes)) {
+              throw new Error("Неверный формат файла графа");
+            }
+            const newId = "proj-" + Date.now();
+            const clonedNodes = srcBoard.nodes.map((n) => ({ ...n }));
+            const clonedEdges = Array.isArray(srcBoard.edges) ? srcBoard.edges.map((ed) => ({ ...ed })) : [];
+            const imported = {
+              id: newId,
+              name: (srcBoard.name || file.name.replace(/\.json$/i, "")) + " (импорт)",
+              projectDir: srcBoard.projectDir || projectDir || "",
+              view: srcBoard.view ? { ...srcBoard.view } : { x: 0, y: 0, zoom: 1 },
+              nodes: clonedNodes,
+              edges: clonedEdges
+            };
+            if (isRunning) stopGraph();
+            setBoards((prev) => [...prev, imported]);
+            setActiveBoardId(newId);
+            setNodeStates({});
+            setSelectedSourceId(null);
+            setSelectedNodeIds([]);
+            lastOutputsRef.current.clear();
+            historyRef.current = { past: [], future: [] };
+            setStatus("Импортировано нод: " + clonedNodes.length + " (" + imported.name + ")");
+          } catch (err) {
+            setStatus("Ошибка импорта: " + (err && err.message ? err.message : String(err)));
+          }
+        };
+        reader.onerror = () => setStatus("Ошибка чтения файла с диска");
+        reader.readAsText(file);
       };
 
       const groupedModels = React.useMemo(() => {
@@ -993,6 +1059,9 @@ window.__ModuleLoader__.load({
               jsx("button", { type: "button", style: btn, onClick: () => setRenamingBoard((v) => !v), children: t.rename }),
               jsx("button", { type: "button", style: { ...btn, background: "#1f6feb", borderColor: "#388bfd", color: "#fff" }, onClick: createNewBoard, children: t.newBoard }),
               boards.length > 1 ? jsx("button", { type: "button", style: { ...btn, color: "#f87171" }, onClick: deleteActiveBoard, children: t.delBoard }) : null,
+              jsx("button", { type: "button", style: btn, onClick: exportActiveBoard, children: t.exportBoard }),
+              jsx("button", { type: "button", style: btn, onClick: () => { if (fileInputRef.current) { fileInputRef.current.value = ""; fileInputRef.current.click(); } }, children: t.importBoard }),
+              jsx("input", { ref: fileInputRef, type: "file", accept: ".json,application/json", style: { position: "fixed", left: "-9999px", width: "1px", height: "1px", opacity: 0 }, onChange: importBoardFromFile }),
               jsx("span", { style: { opacity: 0.35 }, children: "|" }),
               jsx("button", { type: "button", style: btn, onClick: () => addNode("input"), children: t.addInput }),
               jsx("button", { type: "button", style: btn, onClick: () => addNode("file"), children: t.addFile }),
