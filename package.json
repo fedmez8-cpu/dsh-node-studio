@@ -1,6 +1,6 @@
 {
   "name": "dsh-node-studio",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Визуальный нодовый редактор для DeepSeek Harness",
   "icon": "icon.svg",
   "type": "module",

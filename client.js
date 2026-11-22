@@ -11,6 +11,49 @@ window.__ModuleLoader__.load({
     const PANEL_ID = "node-studio";
     const PANEL_ORDER = 35;
     const STORAGE_KEY = "dsh-node-studio-boards-v2";
+        const SKILLS_STORAGE_KEY = "dsh-node-studio-skills-v1";
+    const BUILTIN_SKILLS = [
+      {
+        id: "builtin-editor",
+        name: "Литературный редактор",
+        builtin: true,
+        prompt: "Ты опытный литературный редактор. Убери канцелярит, штампы и воду. Сделай ритм фраз живым, сохрани авторский голос и подтекст. Сначала дай отредактированный текст, затем кратко перечисли ключевые правки."
+      },
+      {
+        id: "builtin-screenwriter",
+        name: "Сценарист / Драматург",
+        builtin: true,
+        prompt: "Ты профессиональный сценарист. Выстраивай сцену через действие, конфликт и подтекст в диалогах. Покажи эмоции через поведение персонажей, а не прямые объяснения. Держи высокий темп повествования."
+      },
+      {
+        id: "builtin-critic",
+        name: "Критик и бета-ридер",
+        builtin: true,
+        prompt: "Ты вдумчивый бета-ридер и критик. Оцени текст по критериям: логика, мотивация героев, темп, вовлечённость и слабые места. Будь конструктивен, приводи конкретные примеры из текста и предлагай варианты улучшения."
+      },
+      {
+        id: "builtin-analyst",
+        name: "Структурный аналитик",
+        builtin: true,
+        prompt: "Проанализируй входные данные, выдели главные тезисы, скрытые противоречия и причинно-следственные связи. Оформи ответ в виде чёткой структурированной выжимки с выводами."
+      },
+      {
+        id: "builtin-stylist",
+        name: "Стилист и адаптер",
+        builtin: true,
+        prompt: "Перепиши переданный текст, усилив образность, точность глаголов и выразительность деталей, не искажая исходный сюжет и факты."
+      }
+    ];
+
+    function loadCustomSkills() {
+      try {
+        const raw = localStorage.getItem(SKILLS_STORAGE_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    }
     const inject = ["slots", "locale"];
 
     function NodeStudioIcon({ size }) {
@@ -260,6 +303,82 @@ window.__ModuleLoader__.load({
       const projectDir = activeBoard.projectDir || "";
       const canvasRef = React.useRef(null);
       const fileInputRef = React.useRef(null);
+            const skillInputRef = React.useRef(null);
+      const [customSkills, setCustomSkills] = React.useState(() => loadCustomSkills());
+      const allSkills = React.useMemo(() => [...BUILTIN_SKILLS, ...customSkills], [customSkills]);
+
+      React.useEffect(() => {
+        try { localStorage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(customSkills)); } catch {}
+      }, [customSkills]);
+
+      const savePromptAsSkill = (node) => {
+        const promptText = (node.systemPrompt || "").trim();
+        if (!promptText) { setStatus("Сначала введите текст в System Prompt"); return; }
+        const name = window.prompt("Название нового скилла:", node.title || "Мой скилл");
+        if (!name || !name.trim()) return;
+        const id = "skill-" + Date.now();
+        setCustomSkills((prev) => [...prev, { id, name: name.trim(), prompt: promptText }]);
+        updateNode(node.id, { skillId: id });
+        setStatus("Скилл сохранён: " + name.trim());
+      };
+
+      const deleteCustomSkill = (skillId) => {
+        if (!skillId) return;
+        setCustomSkills((prev) => prev.filter((s) => s.id !== skillId));
+        setStatus("Скилл удалён");
+      };
+
+      const exportSkill = (node) => {
+        const found = allSkills.find((s) => s.id === node.skillId);
+        const skillName = found ? found.name : (node.title || "skill");
+        const promptText = node.systemPrompt || (found ? found.prompt : "");
+        if (!promptText.trim()) { setStatus("Нечего экспортировать — промпт пуст"); return; }
+        const data = {
+          format: "dsh-node-studio-skill",
+          version: 1,
+          name: skillName,
+          prompt: promptText
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const safeName = skillName.replace(/[\\/:*?"<>|]+/g, "_");
+        a.href = url;
+        a.download = safeName + ".skill.json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setStatus("Скилл экспортирован: " + safeName + ".skill.json");
+      };
+
+      const importSkillFromFile = async (e) => {
+        const fileList = e.target && e.target.files;
+        const file = Array.from(fileList || []).at(0);
+        if (!file) return;
+        try {
+          const raw = await file.text();
+          let name = file.name.replace(/\.(skill\.json|json|md|txt)$/i, "");
+          let promptText = raw;
+          if (file.name.toLowerCase().endsWith(".json")) {
+            const parsed = JSON.parse(raw);
+            if (typeof parsed.prompt === "string") {
+              promptText = parsed.prompt;
+              if (parsed.name) name = parsed.name;
+            }
+          }
+          if (!promptText.trim()) throw new Error("Файл скилла пуст");
+          const newSkill = { id: "skill-" + Date.now(), name, prompt: promptText };
+          setCustomSkills((prev) => [...prev, newSkill]);
+          const targetNodeId = skillInputRef.current && skillInputRef.current.dataset.targetNode;
+          if (targetNodeId) {
+            updateNode(targetNodeId, { skillId: newSkill.id, systemPrompt: newSkill.prompt });
+          }
+          setStatus("Скилл импортирован: " + name);
+        } catch (err) {
+          setStatus("Ошибка импорта скилла: " + (err && err.message ? err.message : String(err)));
+        }
+      };
       const viewRef = React.useRef(view);
       viewRef.current = view;
       const nodesRef = React.useRef(nodes);
@@ -1062,6 +1181,7 @@ window.__ModuleLoader__.load({
               jsx("button", { type: "button", style: btn, onClick: exportActiveBoard, children: t.exportBoard }),
               jsx("button", { type: "button", style: btn, onClick: () => { if (fileInputRef.current) { fileInputRef.current.value = ""; fileInputRef.current.click(); } }, children: t.importBoard }),
               jsx("input", { ref: fileInputRef, type: "file", accept: ".json,application/json", style: { position: "fixed", left: "-9999px", width: "1px", height: "1px", opacity: 0 }, onChange: importBoardFromFile }),
+                            jsx("input", { ref: skillInputRef, type: "file", accept: ".json,.md,.txt,application/json,text/markdown", style: { position: "fixed", left: "-9999px", width: "1px", height: "1px", opacity: 0 }, onChange: importSkillFromFile }),
               jsx("span", { style: { opacity: 0.35 }, children: "|" }),
               jsx("button", { type: "button", style: btn, onClick: () => addNode("input"), children: t.addInput }),
               jsx("button", { type: "button", style: btn, onClick: () => addNode("file"), children: t.addFile }),
@@ -1205,6 +1325,34 @@ window.__ModuleLoader__.load({
                                       style: { flex: 1, cursor: "pointer" },
                                       onChange: (e) => updateNode(node.id, { temperature: Number(e.target.value) })
                                     })
+                                  ]
+                                }),
+                                                                jsxs("div", {
+                                  style: { display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" },
+                                  children: [
+                                    jsxs("select", {
+                                      style: { ...inp, flex: 1, minWidth: "120px", padding: "3px 6px", fontSize: "12px" },
+                                      value: node.skillId || "",
+                                      onChange: (e) => {
+                                        const sid = e.target.value;
+                                        const found = allSkills.find((s) => s.id === sid);
+                                        if (found) {
+                                          updateNode(node.id, { skillId: sid, systemPrompt: found.prompt });
+                                        } else {
+                                          updateNode(node.id, { skillId: "" });
+                                        }
+                                      },
+                                      children: [
+                                        jsx("option", { value: "", children: "-- Скилл / Пресет --" }),
+                                        allSkills.map((s) => jsx("option", { value: s.id, children: (s.builtin ? "★ " : "") + s.name }, s.id))
+                                      ]
+                                    }),
+                                    jsx("button", { type: "button", title: "Сохранить текущий промпт как скилл", style: { ...btn, padding: "3px 6px", fontSize: "11px" }, onClick: () => savePromptAsSkill(node), children: "+" }),
+                                    jsx("button", { type: "button", title: "Экспортировать скилл в файл", style: { ...btn, padding: "3px 6px", fontSize: "11px" }, onClick: () => exportSkill(node), children: "Exp" }),
+                                    jsx("button", { type: "button", title: "Импортировать скилл (.json или .md)", style: { ...btn, padding: "3px 6px", fontSize: "11px" }, onClick: () => { if (skillInputRef.current) { skillInputRef.current.dataset.targetNode = node.id; skillInputRef.current.value = ""; skillInputRef.current.click(); } }, children: "Imp" }),
+                                    customSkills.some((s) => s.id === node.skillId)
+                                      ? jsx("button", { type: "button", title: "Удалить выбранный скилл", style: { ...btn, padding: "3px 6px", fontSize: "11px", color: "#f87171" }, onClick: () => deleteCustomSkill(node.skillId), children: "×" })
+                                      : null
                                   ]
                                 }),
                                 jsx("label", { style: { opacity: 0.75 }, children: t.sysPrompt }),
