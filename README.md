@@ -4,6 +4,8 @@ A visual node-based workflow editor plugin for **DeepSeek Harness (DSH)** to bui
 
 <img width="1362" height="817" alt="image" src="https://github.com/user-attachments/assets/6ae3d541-89b1-47d0-9b3d-91d66f3b8089" />
 <img width="1340" height="898" alt="image" src="https://github.com/user-attachments/assets/499f5545-c05c-44fc-8c71-63f7b07fc49c" />
+<img width="1474" height="946" alt="Снимок экрана (80)" src="https://github.com/user-attachments/assets/d6ce5bba-d108-4adb-991e-85a2ffa96e18" />
+
 
 
 
