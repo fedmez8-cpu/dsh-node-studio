@@ -45,6 +45,7 @@ If your provider key is stored in the OS keychain and not exposed to environment
   "gptunnel": "sk-...",
   "openrouter": "sk-or-..."
 }
+`
 
 
 ## Usage & Controls
