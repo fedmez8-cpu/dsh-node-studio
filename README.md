@@ -40,6 +40,7 @@ A visual node-based workflow editor plugin for **DeepSeek Harness (DSH)** to bui
 The plugin automatically reads provider aseURL and API keys from your DSH profile (cordis.patch.yml and environment variables).  
 If your provider key is stored in the OS keychain and not exposed to environment variables, copy keys.example.json to keys.json in the plugin folder and fill in your keys:
 
+
 `json
 {
   "gptunnel": "sk-...",
