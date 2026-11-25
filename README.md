@@ -62,3 +62,6 @@ If your provider key is stored in the OS keychain and not exposed to environment
 ## License
 
 MIT
+
+[![dsh.so risk](https://cdn.dsh.so/badge/dsh-node-studio.svg)](https://www.dsh.so/artifact/dsh-node-studio/?ref=badge)
+[![dsh.so install · dsh 0.2.2-rc.5](https://cdn.dsh.so/badge/install/dsh-node-studio@0.2.2-rc.5.svg)](https://www.dsh.so/artifact/dsh-node-studio/?ref=badge-install)
